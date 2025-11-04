@@ -1,0 +1,274 @@
+class clocktower:
+    def __init__(self, script):
+        self.circle = [] # ordered list of players by seat
+        self.players = {} # dictionary to reference players by name
+        if script == 'trouble brewing':
+            self.characterCounts = { # (townsfolk, outsiders, minions, demons)
+                5: (3,0,1,1),
+                6: (3,1,1,1),
+                7: (5,0,1,1),
+                8: (5,1,1,1),
+                9: (5,2,1,1),
+                10: (7,0,2,1),
+                11: (7,1,2,1),
+                12: (7,2,2,1),
+                13: (9,0,3,1),
+                14: (9,1,3,1),
+                15: (9,2,3,1)
+            }
+            self.minionNames = ['poisoner','spy','scarlet woman','baron']
+            self.combinationsWith4Types = { # used to select minions
+                1: [[0],[1],[2],[3]],
+                2: [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]],
+                3: [[0,1,2],[0,1,3],[0,2,3],[1,2,3]]
+            }
+    
+    class player:
+        def __init__(self, parent, name, claimedCharacterName=None):
+            self.name = name
+            self.clocktower = parent
+            self.seat = 0
+            self.isMe = (name == 'you')
+            self.claimedCharacter = None
+            if(claimedCharacterName): self.claimedCharacter = clocktower.character(claimedCharacterName)
+            self.claimedInfos = []
+            self.actions = []
+            self.actualCharacter = None
+        
+        def __eq__(self, other):
+            return self.name == other.name
+
+        def add_info(self, number=None, characterName=None, name1=None, name2=None):
+            self.claimedInfos.append(self.info(self, number, characterName, name1, name2))
+
+        def add_action(self, actionType=None, targetName=None, result=None):
+            self.actions.append(self.action(self, actionType, targetName, result))
+
+        def canRegisterAs(self, character):
+            if character == self.actualCharacter: return True
+            if self.actualCharacter.name == 'recluse' and character.alignment == 'evil': return True
+            if self.actualCharacter.name == 'spy' and character.alignment == 'good': return True
+            return False
+
+        def canRegisterCharTypeAs(self, charType):
+            if charType == self.actualCharacter.type: return True
+            if self.actualCharacter.name == 'recluse' and charType in {'minion', 'demon'}: return True
+            if self.actualCharacter.name == 'spy' and charType in {'townsfolk', 'outsider'}: return True
+            return False
+
+        def canRegisterAsAlignment(self, alignment):
+            if alignment == self.actualCharacter.alignment: return True
+            if self.actualCharacter.name == 'recluse' and alignment == 'evil': return True
+            if self.actualCharacter.name == 'spy' and alignment == 'good': return True
+            return False
+        
+        class info:
+            def __init__(self, parent, number=None, characterName=None, name1=None, name2=None):
+                self.player = parent
+                self.number = number
+                self.character = None
+                if(characterName): self.character = self.player.clocktower.character(characterName)
+                self.player1 = None
+                if(name1): self.player1 = self.player.clocktower.players[name1]
+                self.player2 = None
+                if(name2): self.player2 = self.player.clocktower.players[name2]
+
+        class action:
+            def __init__(self, parent, actionType, targetName=None, result=None):
+                self.player = parent
+                self.type = actionType
+                self.targetPlayer = None
+                if(targetName): self.targetPlayer = self.player.clocktower.players[targetName]
+                self.result = result
+    
+    class character:
+        def __init__(self, name):
+            self.name = name
+            self.type = self.get_type()
+            self.alignment = self.get_alignment()
+
+        def __eq__(self, other):
+            return self.name == other.name
+        
+        def get_type(self):
+            match self.name:
+                case 'washerwoman': return 'townsfolk'
+                case 'librarian': return 'townsfolk'
+                case 'investigator': return 'townsfolk'
+                case 'chef': return 'townsfolk'
+                case 'empath': return 'townsfolk'
+                case 'fortune teller': return 'townsfolk'
+                case 'undertaker': return 'townsfolk'
+                case 'monk': return 'townsfolk'
+                case 'ravenkeeper': return 'townsfolk'
+                case 'virgin': return 'townsfolk'
+                case 'slayer': return 'townsfolk'
+                case 'soldier': return 'townsfolk'
+                case 'mayor': return 'townsfolk'
+                case 'butler': return 'outsider'
+                case 'drunk': return 'outsider'
+                case 'recluse': return 'outsider'
+                case 'saint': return 'outsider'
+                case 'poisoner': return 'minion'
+                case 'spy': return 'minion'
+                case 'scarlet woman': return 'minion'
+                case 'baron': return 'minion'
+                case 'imp': return 'demon'
+                case _: return None
+
+        def get_alignment(self):
+            match self.type:
+                case 'townsfolk': return 'good'
+                case 'outsider': return 'good'
+                case 'minion': return 'evil'
+                case 'demon': return 'evil'
+                case _: return None
+
+    def add_player(self, name, claimedCharacterName=None):
+        self.circle.append(self.player(self, name, claimedCharacterName))
+        self.circle[-1].seat = len(self.circle) - 1
+        self.players[name] = self.circle[-1]
+
+    def everyPermutationWithNItems(self, n, itemCount): # used to select wrong characters
+        permutations = []
+        if n == 1:
+            for i in range(itemCount): permutations.append([i])
+        else:
+            smallerPermutations = self.everyPermutationWithNItems(n - 1, itemCount)
+            for smallerPermutation in smallerPermutations:
+                for i in range(itemCount):
+                    if i not in smallerPermutation: 
+                        longerPermutation = [element for element in smallerPermutation]
+                        longerPermutation.append(i)
+                        permutations.append(longerPermutation)
+        return permutations
+
+    def isConsistent(self, playerCircle):
+        testCaseReached = False
+        if(playerCircle[5].actualCharacter.name == 'imp' and playerCircle[6].actualCharacter.name == 'poisoner'): testCaseReached = True
+        remainingPoisons = 0
+        outsiderCount = 0
+        baronExists = False
+        for player in playerCircle:
+            playerConsistent = True
+
+            if player.isMe and player.actualCharacter.name not in {'drunk', player.claimedCharacter.name}:
+                return False
+            elif player.actualCharacter.name == 'baron': baronExists = True
+            elif player.actualCharacter.type == 'outsider': outsiderCount = outsiderCount + 1
+
+            if player.actualCharacter.name == 'drunk' and player.claimedCharacter.type != 'townsfolk': return False
+            
+            for action in player.actions:
+                if action.type == 'slay':
+                    if player.actualCharacter.name == 'slayer':
+                        if action.targetPlayer.actualCharacter.type == 'demon': # recluse means anything can happen and player is consistent
+                            if action.result != 'trigger': 
+                                playerConsistent = False # slayer could be poisoned
+                                if testCaseReached: print(player.name," slay should have triggered if not poisoned")
+                        elif not action.targetPlayer.canRegisterCharTypeAs('demon'):
+                            if action.result == 'trigger': return False
+                    elif action.result == 'trigger': return False # spy can't fake the slayer's ability
+                    
+                elif action.type == 'wasnominated':
+                    if player.actualCharacter.name == 'virgin':
+                        if action.targetPlayer.actualCharacter.type == 'townsfolk': # spy means anything can happen and player is consistent
+                            if action.result != 'trigger': 
+                                playerConsistent = False # virgin could be poisoned
+                                if testCaseReached: print(player.name," wasnominated should have triggered if not poisoned")
+                        elif not action.targetPlayer.canRegisterCharTypeAs('townsfolk'):
+                            if action.result == 'trigger': return False
+                    elif action.result == 'trigger': return False # spy can't fake the virgin's ability
+                
+                elif action.type == 'wasexecuted':
+                    if player.actualCharacter.name == 'saint': # the game didn't end because we're solving a puzzle
+                        playerConsistent = False
+
+                else: raise Exception("Action doesn't make sense.")     
+            
+            for info in player.claimedInfos:
+                match player.actualCharacter.name:
+                    case "washerwoman":
+                        if info.player1.canRegisterAs(info.character) == False and info.player2.canRegisterAs(info.character) == False:
+                            playerConsistent = False
+                            if testCaseReached: print(player.name," can't be washerwoman if not poisoned")
+                    case "librarian":
+                        if info.number == 0: 
+                            for player in playerCircle:
+                                if player.actualCharacter.name in {'butler', 'drunk', 'saint'}: # characters who must register as outsiders
+                                    playerConsistent = False
+                        elif info.player1.canRegisterAs(info.character) == False and info.player2.canRegisterAs(info.character) == False:
+                            playerConsistent = False
+                    case "investigator":
+                        if info.player1.canRegisterAs(info.character) == False and info.player2.canRegisterAs(info.character) == False:
+                            playerConsistent = False
+                    case "chef":
+                        minPairCount = 0
+                        maxPairCount = 0
+                        for i in range(len(playerCircle)):
+                            if playerCircle[i].canRegisterAsAlignment('evil') and playerCircle[(i+1) % len(playerCircle)].canRegisterAsAlignment('evil'): 
+                                maxPairCount = maxPairCount + 1
+                                minPairCount = minPairCount + 1
+                                if playerCircle[i].canRegisterAsAlignment('good') or playerCircle[(i+1) % len(playerCircle)].canRegisterAsAlignment('good'):
+                                    minPairCount = minPairCount - 1
+                        
+                        playerConsistent = info.number >= minPairCount and info.number <= maxPairCount
+                    case "empath":
+                        minCount = 0
+                        maxCount = 0
+
+                        if playerCircle[(player.seat + 1) % len(playerCircle)].canRegisterAsAlignment('evil'):
+                            maxCount = maxCount + 1
+                        if not playerCircle[(player.seat + 1) % len(playerCircle)].canRegisterAsAlignment('good'):
+                            minCount = minCount + 1
+
+                        if playerCircle[(player.seat - 1) % len(playerCircle)].canRegisterAsAlignment('evil'):
+                            maxCount = maxCount + 1
+                        if not playerCircle[(player.seat - 1) % len(playerCircle)].canRegisterAsAlignment('good'):
+                            minCount = minCount + 1
+                        
+                        playerConsistent = info.number >= minCount and info.number <= maxCount
+                    case "fortune teller":
+                        if info.player1.actualCharacter.type == 'demon' or info.player2.actualCharacter.type == 'demon': # must register as demon
+                            if info.number < 1: playerConsistent = False        
+            if player.actualCharacter.name == 'poisoner': remainingPoisons = remainingPoisons + 1
+            if playerConsistent == False: remainingPoisons = remainingPoisons - 1
+            
+        expectedOutsiders = self.characterCounts[len(playerCircle)][1]
+        if baronExists: expectedOutsiders = expectedOutsiders + 2
+        return remainingPoisons >= 0 and expectedOutsiders == outsiderCount
+
+    def getAllSolutions(self, drunksCount=None):
+        initialWrongCharList = ['imp'] # wrongCharList will be a unique combination (not permutation) of possible wrongly-claimed characters 
+        if drunksCount == 1: initialWrongCharList.append('drunk')
+        elif drunksCount == None: 
+            return self.getAllSolutions(0) + self.getAllSolutions(1)
+
+        countCheckedConfigs = 0
+        consistentCircles = []    
+        (townsfolkCount, outsidersCount, minionsCount, demonsCount) = self.characterCounts[len(self.circle)]
+        if drunksCount > outsidersCount: return consistentCircles
+
+        wrongCharPlayerCount = drunksCount + minionsCount + demonsCount 
+        wrongCharPerms = self.everyPermutationWithNItems(wrongCharPlayerCount,len(self.circle))
+        minionCombos = self.combinationsWith4Types[minionsCount]
+        for wrongCharPerm in wrongCharPerms:
+            for minionCombo in minionCombos:
+                wrongCharList = [e for e in initialWrongCharList]
+                for element in minionCombo:
+                    wrongCharList.append(self.minionNames[element])
+                for player in self.circle:
+                    player.actualCharacter = self.character(player.claimedCharacter.name)
+                for i in range(wrongCharPlayerCount):
+                    self.circle[wrongCharPerm[i]].actualCharacter = self.character(wrongCharList[i])
+                countCheckedConfigs = countCheckedConfigs + 1
+                if self.isConsistent(self.circle):
+                    consistentCircle = []
+                    for player in self.circle:
+                        consistentCircle.append(player.actualCharacter.name)
+                    consistentCircles.append(consistentCircle)
+        print("Checked ", countCheckedConfigs, " configurations with ", drunksCount, "drunks.")
+        return consistentCircles       
+
+
+
