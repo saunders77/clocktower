@@ -2,6 +2,7 @@ class clocktower:
     def __init__(self, script):
         self.circle = [] # ordered list of players by seat
         self.players = {} # dictionary to reference players by name
+        self.day = 0
         if script == 'trouble brewing':
             self.characterCounts = { # (townsfolk, outsiders, minions, demons)
                 5: (3,0,1,1),
@@ -31,18 +32,23 @@ class clocktower:
             self.isMe = (name == 'you')
             self.claimedCharacter = None
             if(claimedCharacterName): self.claimedCharacter = clocktower.character(claimedCharacterName)
-            self.claimedInfos = []
-            self.actions = []
+            self.alive = [True] # array of daytimes. Living status is for the end of the previous night
+            self.claimedInfos = [None] # array of daytimes
+            self.actions = [[]] # array of daytimes. Each daytime can have multiple actions
             self.actualCharacter = None
         
         def __eq__(self, other):
             return self.name == other.name
 
         def add_info(self, number=None, characterName=None, name1=None, name2=None):
-            self.claimedInfos.append(self.info(self, number, characterName, name1, name2))
+            self.claimedInfos[self.clocktower.day] = self.info(self, number, characterName, name1, name2)
 
         def add_action(self, actionType=None, targetName=None, result=None):
-            self.actions.append(self.action(self, actionType, targetName, result))
+            self.actions[self.clocktower.day].append(self.action(self, actionType, targetName, result))
+            if actionType == 'was_killed_at_night': self.alive[self.clocktower.day] = False
+            elif actionType == 'was_executed': self.alive.append(False)
+            elif actionType in {'slay','was_nominated'} and result == 'trigger':
+                self.clocktower.players[targetName].alive.append(False)
 
         def canRegisterAs(self, character):
             if character == self.actualCharacter: return True
@@ -129,6 +135,14 @@ class clocktower:
         self.circle[-1].seat = len(self.circle) - 1
         self.players[name] = self.circle[-1]
 
+    def next_day(self):
+        self.day = self.day + 1  
+        for player in self.circle:
+            if len(player.alive) == self.day:
+                player.alive.append(player.alive[self.day - 1])
+            player.actions.append([])
+            player.claimedInfos.append(None)
+
     def everyPermutationWithNItems(self, n, itemCount): # used to select wrong characters
         permutations = []
         if n == 1:
@@ -143,7 +157,7 @@ class clocktower:
                         permutations.append(longerPermutation)
         return permutations
 
-    def isConsistent(self, playerCircle):
+    def isConsistentDay(self, playerCircle, day):
         testCaseReached = False
         if(playerCircle[5].actualCharacter.name == 'imp' and playerCircle[6].actualCharacter.name == 'poisoner'): testCaseReached = True
         remainingPoisons = 0
@@ -159,7 +173,7 @@ class clocktower:
 
             if player.actualCharacter.name == 'drunk' and player.claimedCharacter.type != 'townsfolk': return False
             
-            for action in player.actions:
+            for action in player.actions[day]:
                 if action.type == 'slay':
                     if player.actualCharacter.name == 'slayer':
                         if action.targetPlayer.actualCharacter.type == 'demon': # recluse means anything can happen and player is consistent
@@ -170,7 +184,7 @@ class clocktower:
                             if action.result == 'trigger': return False
                     elif action.result == 'trigger': return False # spy can't fake the slayer's ability
                     
-                elif action.type == 'wasnominated':
+                elif action.type == 'was_nominated':
                     if player.actualCharacter.name == 'virgin':
                         if action.targetPlayer.actualCharacter.type == 'townsfolk': # spy means anything can happen and player is consistent
                             if action.result != 'trigger': 
@@ -180,13 +194,17 @@ class clocktower:
                             if action.result == 'trigger': return False
                     elif action.result == 'trigger': return False # spy can't fake the virgin's ability
                 
-                elif action.type == 'wasexecuted':
+                elif action.type == 'was_executed':
                     if player.actualCharacter.name == 'saint': # the game didn't end because we're solving a puzzle
                         playerConsistent = False
+                
+                elif action.type == 'was_killed_at_night':
+                    if player.actualCharacter.name == 'soldier': playerConsistent = False
 
                 else: raise Exception("Action doesn't make sense.")     
             
-            for info in player.claimedInfos:
+            info = player.claimedInfos[day]
+            if info != None:
                 match player.actualCharacter.name:
                     case "washerwoman":
                         if info.player1.canRegisterAs(info.character) == False and info.player2.canRegisterAs(info.character) == False:
@@ -262,7 +280,10 @@ class clocktower:
                 for i in range(wrongCharPlayerCount):
                     self.circle[wrongCharPerm[i]].actualCharacter = self.character(wrongCharList[i])
                 countCheckedConfigs = countCheckedConfigs + 1
-                if self.isConsistent(self.circle):
+                for day in range(self.day + 1):
+                    allDaysConsistent = True
+                    if self.isConsistentDay(self.circle, day) == False: allDaysConsistent = False
+                if allDaysConsistent:
                     consistentCircle = []
                     for player in self.circle:
                         consistentCircle.append(player.actualCharacter.name)
