@@ -3,6 +3,8 @@ class clocktower:
         self.circle = [] # ordered list of players by seat
         self.players = {} # dictionary to reference players by name
         self.day = 0
+        self.executedPlayers = [] # indexed by the day of execution
+        self.demonKilledPlayers = [None] # indexed by the day after kill
         if script == 'trouble brewing':
             self.characterCounts = { # (townsfolk, outsiders, minions, demons)
                 5: (3,0,1,1),
@@ -45,10 +47,18 @@ class clocktower:
 
         def add_action(self, actionType=None, targetName=None, result=None):
             self.actions[self.clocktower.day].append(self.action(self, actionType, targetName, result))
-            if actionType == 'was_killed_at_night': self.alive[self.clocktower.day] = False
-            elif actionType == 'was_executed': self.alive.append(False)
-            elif actionType in {'slay','was_nominated'} and result == 'trigger':
-                self.clocktower.players[targetName].alive.append(False)
+            
+            if actionType == 'was_killed_at_night': 
+                self.alive[self.clocktower.day] = False
+                self.clocktower.demonKilledPlayers.append(self)
+            else:
+                if self.clocktower.day > 0 and len(self.clocktower.demonKilledPlayers) < self.clocktower.day + 1:
+                    self.clocktower.demonKilledPlayers.append(None)
+                if actionType == 'was_executed': 
+                    self.alive.append(False)
+                    self.clocktower.executedPlayers.append(self)
+                elif actionType in {'slay','was_nominated'} and result == 'trigger':
+                    self.clocktower.players[targetName].alive.append(False)
 
         def canRegisterAs(self, character):
             if character == self.actualCharacter: return True
@@ -136,7 +146,8 @@ class clocktower:
         self.players[name] = self.circle[-1]
 
     def next_day(self):
-        self.day = self.day + 1  
+        self.day += 1
+        if len(self.executedPlayers) < self.day: self.executedPlayers.append(None)
         for player in self.circle:
             if len(player.alive) == self.day:
                 player.alive.append(player.alive[self.day - 1])
@@ -157,29 +168,28 @@ class clocktower:
                         permutations.append(longerPermutation)
         return permutations
 
-    def isConsistentDay(self, playerCircle, day):
-        testCaseReached = False
-        if(playerCircle[5].actualCharacter.name == 'imp' and playerCircle[6].actualCharacter.name == 'poisoner'): testCaseReached = True
+    def isConsistentDay(self, testDay):
+        playerCount = len(self.circle)
         remainingPoisons = 0
         outsiderCount = 0
         baronExists = False
-        for player in playerCircle:
+        for player in self.circle:
             playerConsistent = True
 
             if player.isMe and player.actualCharacter.name not in {'drunk', player.claimedCharacter.name}:
                 return False
             elif player.actualCharacter.name == 'baron': baronExists = True
-            elif player.actualCharacter.type == 'outsider': outsiderCount = outsiderCount + 1
+            elif player.actualCharacter.type == 'outsider': outsiderCount += 1
 
             if player.actualCharacter.name == 'drunk' and player.claimedCharacter.type != 'townsfolk': return False
             
-            for action in player.actions[day]:
+            for action in player.actions[testDay]:
                 if action.type == 'slay':
                     if player.actualCharacter.name == 'slayer':
                         if action.targetPlayer.actualCharacter.type == 'demon': # recluse means anything can happen and player is consistent
                             if action.result != 'trigger': 
                                 playerConsistent = False # slayer could be poisoned
-                                if testCaseReached: print(player.name," slay should have triggered if not poisoned")
+                                
                         elif not action.targetPlayer.canRegisterCharTypeAs('demon'):
                             if action.result == 'trigger': return False
                     elif action.result == 'trigger': return False # spy can't fake the slayer's ability
@@ -189,7 +199,6 @@ class clocktower:
                         if action.targetPlayer.actualCharacter.type == 'townsfolk': # spy means anything can happen and player is consistent
                             if action.result != 'trigger': 
                                 playerConsistent = False # virgin could be poisoned
-                                if testCaseReached: print(player.name," wasnominated should have triggered if not poisoned")
                         elif not action.targetPlayer.canRegisterCharTypeAs('townsfolk'):
                             if action.result == 'trigger': return False
                     elif action.result == 'trigger': return False # spy can't fake the virgin's ability
@@ -203,16 +212,15 @@ class clocktower:
 
                 else: raise Exception("Action doesn't make sense.")     
             
-            info = player.claimedInfos[day]
+            info = player.claimedInfos[testDay]
             if info != None:
                 match player.actualCharacter.name:
                     case "washerwoman":
                         if info.player1.canRegisterAs(info.character) == False and info.player2.canRegisterAs(info.character) == False:
                             playerConsistent = False
-                            if testCaseReached: print(player.name," can't be washerwoman if not poisoned")
                     case "librarian":
                         if info.number == 0: 
-                            for player in playerCircle:
+                            for player in self.circle:
                                 if player.actualCharacter.name in {'butler', 'drunk', 'saint'}: # characters who must register as outsiders
                                     playerConsistent = False
                         elif info.player1.canRegisterAs(info.character) == False and info.player2.canRegisterAs(info.character) == False:
@@ -223,36 +231,50 @@ class clocktower:
                     case "chef":
                         minPairCount = 0
                         maxPairCount = 0
-                        for i in range(len(playerCircle)):
-                            if playerCircle[i].canRegisterAsAlignment('evil') and playerCircle[(i+1) % len(playerCircle)].canRegisterAsAlignment('evil'): 
-                                maxPairCount = maxPairCount + 1
-                                minPairCount = minPairCount + 1
-                                if playerCircle[i].canRegisterAsAlignment('good') or playerCircle[(i+1) % len(playerCircle)].canRegisterAsAlignment('good'):
-                                    minPairCount = minPairCount - 1
+                        for i in range(playerCount):
+                            if self.circle[i].canRegisterAsAlignment('evil') and self.circle[(i+1) % playerCount].canRegisterAsAlignment('evil'): 
+                                maxPairCount += 1
+                                minPairCount += 1
+                                if self.circle[i].canRegisterAsAlignment('good') or self.circle[(i+1) % playerCount].canRegisterAsAlignment('good'):
+                                    minPairCount -= 1
                         
                         playerConsistent = info.number >= minPairCount and info.number <= maxPairCount
                     case "empath":
                         minCount = 0
                         maxCount = 0
 
-                        if playerCircle[(player.seat + 1) % len(playerCircle)].canRegisterAsAlignment('evil'):
-                            maxCount = maxCount + 1
-                        if not playerCircle[(player.seat + 1) % len(playerCircle)].canRegisterAsAlignment('good'):
-                            minCount = minCount + 1
+                        # find neighbours
+                        leftNeighbour = self.circle[(player.seat + 1) % playerCount]
+                        while leftNeighbour.alive[testDay] == False:
+                            leftNeighbour = self.circle[(leftNeighbour.seat + 1) % playerCount]
+                        rightNeighbour = self.circle[(player.seat - 1) % playerCount]
+                        while rightNeighbour.alive[testDay] == False:
+                            rightNeighbour = self.circle[(rightNeighbour.seat - 1) % playerCount]
 
-                        if playerCircle[(player.seat - 1) % len(playerCircle)].canRegisterAsAlignment('evil'):
-                            maxCount = maxCount + 1
-                        if not playerCircle[(player.seat - 1) % len(playerCircle)].canRegisterAsAlignment('good'):
-                            minCount = minCount + 1
+                        if leftNeighbour.canRegisterAsAlignment('evil'): maxCount += 1
+                        if not leftNeighbour.canRegisterAsAlignment('good'): minCount += 1
+
+                        if rightNeighbour.canRegisterAsAlignment('evil'): maxCount += 1
+                        if not rightNeighbour.canRegisterAsAlignment('good'): minCount += 1
                         
                         playerConsistent = info.number >= minCount and info.number <= maxCount
                     case "fortune teller":
                         if info.player1.actualCharacter.type == 'demon' or info.player2.actualCharacter.type == 'demon': # must register as demon
-                            if info.number < 1: playerConsistent = False        
-            if player.actualCharacter.name == 'poisoner': remainingPoisons = remainingPoisons + 1
-            if playerConsistent == False: remainingPoisons = remainingPoisons - 1
+                            if info.number < 1: playerConsistent = False 
+                    case "undertaker":
+                        if self.executedPlayers[testDay - 1] == None: playerConsistent = False # undertaker shouldn't be woken without execution
+                        elif not self.executedPlayers[testDay - 1].canRegisterAs(info.character):
+                            playerConsistent = False
+                    case "monk": # considered "info" instead of an action because it's secretly chosen
+                        if self.demonKilledPlayers[testDay] == info.player1:
+                            playerConsistent = False
+                    case "ravenkeeper":
+                        if not info.player1.canRegisterAs(info.character): playerConsistent = False
+
+            if player.actualCharacter.name == 'poisoner': remainingPoisons += 1
+            if playerConsistent == False: remainingPoisons -= 1
             
-        expectedOutsiders = self.characterCounts[len(playerCircle)][1]
+        expectedOutsiders = self.characterCounts[playerCount][1]
         if baronExists: expectedOutsiders = expectedOutsiders + 2
         return remainingPoisons >= 0 and expectedOutsiders == outsiderCount
 
@@ -279,10 +301,10 @@ class clocktower:
                     player.actualCharacter = self.character(player.claimedCharacter.name)
                 for i in range(wrongCharPlayerCount):
                     self.circle[wrongCharPerm[i]].actualCharacter = self.character(wrongCharList[i])
-                countCheckedConfigs = countCheckedConfigs + 1
-                for day in range(self.day + 1):
+                countCheckedConfigs += 1
+                for testDay in range(self.day + 1):
                     allDaysConsistent = True
-                    if self.isConsistentDay(self.circle, day) == False: allDaysConsistent = False
+                    if self.isConsistentDay(testDay) == False: allDaysConsistent = False
                 if allDaysConsistent:
                     consistentCircle = []
                     for player in self.circle:
