@@ -1,11 +1,11 @@
-class clocktower:
+class game:
     def __init__(self, script):
         self.circle = [] # ordered list of players by seat
         self.players = {} # dictionary to reference players by name
         self.day = 0
         self.executedPlayers = [] # indexed by the day of execution
         self.demonKilledPlayers = [None] # indexed by the day after kill
-        if script == 'trouble brewing':
+        if script == 'trouble_brewing':
             self.characterCounts = { # (townsfolk, outsiders, minions, demons)
                 5: (3,0,1,1),
                 6: (3,1,1,1),
@@ -29,11 +29,11 @@ class clocktower:
     class player:
         def __init__(self, parent, name, claimedCharacterName=None):
             self.name = name
-            self.clocktower = parent
+            self.game = parent
             self.seat = 0
             self.isMe = (name == 'you')
             self.claimedCharacter = None
-            if(claimedCharacterName): self.claimedCharacter = clocktower.character(claimedCharacterName)
+            if(claimedCharacterName): self.claimedCharacter = self.game.character(claimedCharacterName)
             self.alive = [True] # array of daytimes. Living status is for the end of the previous night
             self.claimedInfos = [None] # array of daytimes
             self.actions = [[]] # array of daytimes. Each daytime can have multiple actions
@@ -43,30 +43,30 @@ class clocktower:
             return self.name == other.name
 
         def add_info(self, number=None, characterName=None, name1=None, name2=None):
-            self.claimedInfos[self.clocktower.day] = self.info(self, number, characterName, name1, name2)
+            self.claimedInfos[self.game.day] = self.info(self, number, characterName, name1, name2)
 
         def add_action(self, actionType=None, targetName=None, result=None):
-            self.actions[self.clocktower.day].append(self.action(self, actionType, targetName, result))
+            self.actions[self.game.day].append(self.action(self, actionType, targetName, result))
             
             if actionType == 'was_killed_at_night': 
-                self.alive[self.clocktower.day] = False
-                self.clocktower.demonKilledPlayers.append(self)
+                self.alive[self.game.day] = False
+                self.game.demonKilledPlayers.append(self)
             else:
-                if self.clocktower.day > 0 and len(self.clocktower.demonKilledPlayers) < self.clocktower.day + 1:
-                    self.clocktower.demonKilledPlayers.append(None)
+                if self.game.day > 0 and len(self.game.demonKilledPlayers) < self.game.day + 1:
+                    self.game.demonKilledPlayers.append(None)
                 if actionType == 'was_executed': 
                     self.alive.append(False)
-                    self.clocktower.executedPlayers.append(self)
+                    self.game.executedPlayers.append(self)
                 elif actionType in {'slay','was_nominated'} and result == 'trigger':
-                    self.clocktower.players[targetName].alive.append(False)
+                    self.game.players[targetName].alive.append(False)
 
-        def canRegisterAs(self, character):
+        def canRegisterAsChar(self, character):
             if character == self.actualCharacter: return True
             if self.actualCharacter.name == 'recluse' and character.alignment == 'evil': return True
             if self.actualCharacter.name == 'spy' and character.alignment == 'good': return True
             return False
 
-        def canRegisterCharTypeAs(self, charType):
+        def canRegisterAsType(self, charType):
             if charType == self.actualCharacter.type: return True
             if self.actualCharacter.name == 'recluse' and charType in {'minion', 'demon'}: return True
             if self.actualCharacter.name == 'spy' and charType in {'townsfolk', 'outsider'}: return True
@@ -83,18 +83,18 @@ class clocktower:
                 self.player = parent
                 self.number = number
                 self.character = None
-                if(characterName): self.character = self.player.clocktower.character(characterName)
+                if(characterName): self.character = self.player.game.character(characterName)
                 self.player1 = None
-                if(name1): self.player1 = self.player.clocktower.players[name1]
+                if(name1): self.player1 = self.player.game.players[name1]
                 self.player2 = None
-                if(name2): self.player2 = self.player.clocktower.players[name2]
+                if(name2): self.player2 = self.player.game.players[name2]
 
         class action:
             def __init__(self, parent, actionType, targetName=None, result=None):
                 self.player = parent
                 self.type = actionType
                 self.targetPlayer = None
-                if(targetName): self.targetPlayer = self.player.clocktower.players[targetName]
+                if(targetName): self.targetPlayer = self.player.game.players[targetName]
                 self.result = result
     
     class character:
@@ -173,7 +173,10 @@ class clocktower:
         remainingPoisons = 0
         outsiderCount = 0
         baronExists = False
+        characters = {}
         for player in self.circle:
+            if player.actualCharacter in characters: return False # duplicate characters
+            else: characters.add(player.actualCharacter)
             playerConsistent = True
 
             if player.isMe and player.actualCharacter.name not in {'drunk', player.claimedCharacter.name}:
@@ -190,7 +193,7 @@ class clocktower:
                             if action.result != 'trigger': 
                                 playerConsistent = False # slayer could be poisoned
                                 
-                        elif not action.targetPlayer.canRegisterCharTypeAs('demon'):
+                        elif not action.targetPlayer.canRegisterAsType('demon'):
                             if action.result == 'trigger': return False
                     elif action.result == 'trigger': return False # spy can't fake the slayer's ability
                     
@@ -199,7 +202,7 @@ class clocktower:
                         if action.targetPlayer.actualCharacter.type == 'townsfolk': # spy means anything can happen and player is consistent
                             if action.result != 'trigger': 
                                 playerConsistent = False # virgin could be poisoned
-                        elif not action.targetPlayer.canRegisterCharTypeAs('townsfolk'):
+                        elif not action.targetPlayer.canRegisterAsType('townsfolk'):
                             if action.result == 'trigger': return False
                     elif action.result == 'trigger': return False # spy can't fake the virgin's ability
                 
@@ -216,17 +219,17 @@ class clocktower:
             if info != None:
                 match player.actualCharacter.name:
                     case "washerwoman":
-                        if info.player1.canRegisterAs(info.character) == False and info.player2.canRegisterAs(info.character) == False:
+                        if info.player1.canRegisterAsChar(info.character) == False and info.player2.canRegisterAsChar(info.character) == False:
                             playerConsistent = False
                     case "librarian":
                         if info.number == 0: 
                             for player in self.circle:
                                 if player.actualCharacter.name in {'butler', 'drunk', 'saint'}: # characters who must register as outsiders
                                     playerConsistent = False
-                        elif info.player1.canRegisterAs(info.character) == False and info.player2.canRegisterAs(info.character) == False:
+                        elif info.player1.canRegisterAsChar(info.character) == False and info.player2.canRegisterAsChar(info.character) == False:
                             playerConsistent = False
                     case "investigator":
-                        if info.player1.canRegisterAs(info.character) == False and info.player2.canRegisterAs(info.character) == False:
+                        if info.player1.canRegisterAsChar(info.character) == False and info.player2.canRegisterAsChar(info.character) == False:
                             playerConsistent = False
                     case "chef":
                         minPairCount = 0
@@ -263,13 +266,13 @@ class clocktower:
                             if info.number < 1: playerConsistent = False 
                     case "undertaker":
                         if self.executedPlayers[testDay - 1] == None: playerConsistent = False # undertaker shouldn't be woken without execution
-                        elif not self.executedPlayers[testDay - 1].canRegisterAs(info.character):
+                        elif not self.executedPlayers[testDay - 1].canRegisterAsChar(info.character):
                             playerConsistent = False
                     case "monk": # considered "info" instead of an action because it's secretly chosen
                         if self.demonKilledPlayers[testDay] == info.player1:
                             playerConsistent = False
                     case "ravenkeeper":
-                        if not info.player1.canRegisterAs(info.character): playerConsistent = False
+                        if not info.player1.canRegisterAsChar(info.character): playerConsistent = False
 
             if player.actualCharacter.name == 'poisoner': remainingPoisons += 1
             if playerConsistent == False: remainingPoisons -= 1
