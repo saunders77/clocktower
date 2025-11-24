@@ -17,10 +17,10 @@ g.add_player('gisele',  'chef')
 
 g.players["you"].add_info(2)
 g.players["abed"].add_info(1,'drunk','you','gisele')
-g.players["chris"].add_action('slay', 'abed', None)
+g.players["chris"].slay('abed', None)
 g.players["denny"].add_info(1, 'poisoner', 'chris', 'gisele')
 g.players["egan"].add_info(1,'librarian','abed','finn')
-g.players["finn"].add_action('was_nominated','abed', None)
+g.players["abed"].nominate('finn', None)
 g.players["gisele"].add_info(1)
 
 

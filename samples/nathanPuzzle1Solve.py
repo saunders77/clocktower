@@ -20,7 +20,7 @@ g.players["abed"].add_info(1,'drunk','denny','chris')
 g.players["beth"].add_info(2)
 g.players["egan"].add_info(1,'librarian','abed','you')
 g.players["finn"].add_info(0,'demon','egan','denny')
-g.players["gisele"].add_action("slay", "chris", None)
+g.players["gisele"].slay("chris", None)
 g.players["denny"].add_info(1)
 
 solutions = g.getAllSolutions()

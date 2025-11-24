@@ -40,25 +40,33 @@ number is required and other parameters are optional. For roles without a specif
 
 info should be added only after players have been added, if info references players
 
-if players change their info claims, previous claims can be overwritten with player.change_info (seel below)
+add_info can called once, at most, per player per day
 
-### player.change_info(night_number, number, info_character_name, other_player_name_1, other_player_name_2)
+if players change their info claims, previous claims can be overwritten with player.previous_info (see below)
 
-changes info, if a player says they lied about previous information
+### player.previous_info(night_number, number, info_character_name, other_player_name_1, other_player_name_2)
 
-arguments are the same as add_info, except for the night_number parameter. The number corresponds to the night when the info was made, either 0 for the initial night, or 1, 2, 3, ... for subsequent nights.
+adds or changes info, if a player provided info for a morning before this morning or if a player says they lied about previous information
 
-### player.add_action(action_name, target_player_name, result)
+arguments are the same as add_info, except for the initial night_number parameter. The number corresponds to the night when the info was made, either 0 for the initial night, or 1, 2, 3, ... for subsequent nights.
 
-action describes an event which may trigger abilities during the day. The player whose action is being added is the one which may have an ability related to the action.
+### player.slay(target_player_name, result)
 
-action_name can be 'slay', 'wasnominated', or 'wasexecuted'.
+call when a player publicly attempts to slay. result is None if the target doesn't die. Result should be 'trigger' or True if the target dies.
 
-target_player_name (optional) is the other player (if any) who interacted with the action player.
+### player.nominate(nominee_name, result)
 
 Nominations must be recorded in actions, even if they do not trigger an execution (otherwise some Virgin solutions can't be excluded).
 
-result is None or 'trigger'.
+result is None if the player nominating survives. If the player nominating dies, result is 'trigger' or True if the nominating player dies (would be from nominating the virgin)
+
+### player.executed_by_vote()
+
+call when the player is executed via vote
+
+### player.was_killed_at_night()
+
+call when you discover the demon (night) kill
 
 ### player.claim(claimed_character_name)
 

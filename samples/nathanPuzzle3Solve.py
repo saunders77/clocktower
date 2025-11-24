@@ -18,10 +18,9 @@ g.add_player('gisele',  'investigator')
 g.players["you"].add_info(1)
 g.players["abed"].add_info(2)
 g.players["beth"].add_info(0)
-g.players["denny"].add_action('slay', 'chris', 'trigger')
-g.players["finn"].add_action('was_nominated','denny', None)
+g.players["denny"].slay('chris', 'trigger')
+g.players["denny"].nominate('finn', None)
 g.players["gisele"].add_info(1, 'poisoner', 'beth', 'finn')
-
 
 solutions = g.getAllSolutions()
 print("Found ",len(solutions), " solutions:")
