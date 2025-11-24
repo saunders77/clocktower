@@ -21,9 +21,38 @@ g.players["beth"].add_info(2)
 g.players["egan"].add_info(1,'librarian','abed','you')
 g.players["finn"].add_info(0,'demon','egan','denny')
 g.players["gisele"].add_action("slay", "chris", None)
-#g.players["denny"].add_info(1)
+g.players["denny"].add_info(1)
 
 solutions = g.getAllSolutions()
-#print("Found ",len(solutions), " solutions:")
-#for solution in solutions: print(solution)
-print(solutions)
+print("Found ",len(solutions), " solutions:")
+for solution in solutions: print(solution)
+
+### output ###
+# 
+# Checked  224  configurations with  0 drunks.
+# Checked  1344  configurations with  1 drunks.
+# Found  7  solutions:
+# IMP: beth
+#         poisoner: chris
+#         empath: you, librarian: abed, recluse: denny, washerwoman: egan, fortune_teller: finn, slayer: gisele
+# IMP: beth
+#         spy: chris
+#         empath: you, librarian: abed, recluse: denny, washerwoman: egan, fortune_teller: finn, slayer: gisele
+# IMP: beth
+#         poisoner: denny
+#         empath: you, librarian: abed, saint: chris, washerwoman: egan, fortune_teller: finn, slayer: gisele
+# IMP: beth
+#         spy: denny
+#         empath: you, librarian: abed, saint: chris, washerwoman: egan, fortune_teller: finn, slayer: gisele
+# IMP: beth
+#         baron: egan
+#         drunk: abed
+#         empath: you, saint: chris, recluse: denny, fortune_teller: finn, slayer: gisele
+# IMP: egan
+#         baron: finn
+#         drunk: abed
+#         empath: you, chef: beth, saint: chris, recluse: denny, slayer: gisele
+# IMP: finn
+#         baron: egan
+#         drunk: abed
+#         empath: you, chef: beth, saint: chris, recluse: denny, slayer: gisele

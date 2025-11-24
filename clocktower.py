@@ -5,7 +5,10 @@ class game:
         self.day = 0
         self.demonKilledPlayers = [None] # indexed by the day after kill
         self.dailyActions = [[]]
-        self.queuedWorlds = [] # for solving
+
+        # for solving: 
+        self.queuedWorlds = []
+
         if script == 'trouble_brewing':
             self.characterCounts = { # (townsfolk, outsiders, minions, demons)
                 5: (3,0,1,1),
@@ -174,7 +177,7 @@ class game:
             others = {}          
             
             for startingChar in self.startingCharacterNamesList:
-                if startingChar in self.transformationsDict.keys()
+                if startingChar in self.transformationsDict.keys():
                     self.transformationsDict[startingChar]
 
             for charName in self.finalCharactersDict.keys():
@@ -183,15 +186,20 @@ class game:
                 elif charName in {'drunk'}: drunks[charName] = self.finalCharactersDict[charName]
                 else: others[charName] = self.finalCharactersDict[charName]
 
-            s = 'IMP: ' + demons['imp'] + 
-            for name in self.transformationsDict.keys(): s += ' (was ' +  
-            
-            s += 'MINIONS: ' + str(minions) + ', '
-            s += 'DRUNKS'
-            
+            s = 'IMP: ' + demons['imp']
+            if demons['imp'] in self.transformationsDict.keys(): 
+                s += ' (was ' + self.transformationsDict[demons['imp']][0] + ')'
+            s += '\n\t'
+            for minionKey in minions.keys():
+                s += minionKey + ': ' + minions[minionKey] + ', '
+            s = s[:-2] + '\n\t'
+            for drunkKey in drunks.keys():
+                s += drunkKey + ': ' + drunks[drunkKey] + ', '
+            s = s[:-2] + '\n\t'
+            for otherKey in others.keys():
+                s += otherKey + ': ' + others[otherKey] + ', ' 
 
-            
-        
+            return s[:-2]         
 
     def add_player(self, name, claimedCharacterName=None):
         self.circle.append(self.player(self, name, claimedCharacterName))
@@ -232,41 +240,90 @@ class game:
     def isConsistent(self, queuedReplacementMinionNames):
         playerCount = len(self.circle)
         outsiderCount = 0
-        characterNames = set()
-        countLivingPlayers = playerCount
-        livingMinions = []
-        executedPlayers = []
-        replacedMinionNames = []
+        self.characterNames = set()
+        self.countLivingPlayers = playerCount
+        self.livingMinions = []
+        self.executedPlayers = []
+        self.replacedMinionNames = []
         drunk = None
+        virginNeverNominated = True
         
         for player in self.circle:
-            if player.actualCharacter.name in characterNames: return False
-            characterNames.add(player.actualCharacter.name)
+            if player.actualCharacter.name in self.characterNames: return False
+            self.characterNames.add(player.actualCharacter.name)
             if player.isMe and player.actualCharacter.name not in {'drunk', player.claimedCharacter.name}:
                 return False
             elif player.actualCharacter.name == 'drunk':
+                outsiderCount += 1
                 if player.claimedCharacter.type != 'townsfolk': return False
                 drunk = player
             elif player.actualCharacter.type == 'outsider': outsiderCount += 1
-            elif player.actualCharacter.type == 'minion': livingMinions.append(player)
+            elif player.actualCharacter.type == 'minion': self.livingMinions.append(player)
         
-        if drunk != None and drunk.claimedCharacter.name in characterNames: return False # drunk can't think they're a character that's actually in play
+        if drunk != None and drunk.claimedCharacter.name in self.characterNames: return False # drunk can't think they're a character that's actually in play
 
         expectedOutsiders = self.characterCounts[playerCount][1]
-        if 'baron' in characterNames: expectedOutsiders = expectedOutsiders + 2
+        if 'baron' in self.characterNames: expectedOutsiders = expectedOutsiders + 2
         if expectedOutsiders != outsiderCount: return False
+
+        def killedPlayer(player, nightDeath, queuedReplacementMinionNames):
+            self.countLivingPlayers -= 1
+            player.alive = False
+            if nightDeath and player.updatedCharacter.name == 'imp':
+                # check if there's a queue
+                if len(queuedReplacementMinionNames) > 0:
+                    # just use the first minion in the queue
+                    replacedMinionName = queuedReplacementMinionNames.pop(0)
+                    self.characterNames.remove(replacedMinionName)
+                    self.findPlayerByUpdatedCharacter(replacedMinionName).updatedCharacter = self.character('imp')
+                    for m in range(len(self.livingMinions)):
+                        if self.livingMinions[m] == replacedMinion: self.livingMinions.pop(m)
+                else:
+                    # select any minion
+                    replacedMinion = self.livingMinions.pop()
+                    self.replacedMinionNames.append(replacedMinion.updatedCharacter.name)
+                    self.characterNames.remove(replacedMinion.updatedCharacter.name)
+                    replacedMinion.updatedCharacter = self.character('imp')
+
+                    # enqueue each alternative choice
+                    
+                    if len(self.livingMinions) > 0:
+                        characterNamesList = []
+                        fortuneTellerRedHerringSeat = None
+                        for p in self.circle:
+                            characterNamesList.append(p.actualCharacter.name)
+                            if p.isFortuneTellerRedHerring: fortuneTellerRedHerringSeat = p.seat
+                    
+                    while len(self.livingMinions) > 0:
+                        # create a new world to queue, with a list of starting characters and a queue of replacements
+                        minionNamesQueue = []
+                        for name in self.replacedMinionNames:
+                            minionNamesQueue.append(name)
+                        minionNamesQueue.append(self.livingMinions.pop().updatedCharacter.name)
+                        self.queuedWorlds.append(self.world(self, characterNamesList, fortuneTellerRedHerringSeat, minionNamesQueue))
+            elif player.updatedCharacter.name == 'imp': # imp was still killed suring the day and game is still going. Replacement must be scarlet woman
+                scarletWoman = self.findPlayerByUpdatedCharacter('scarlet_woman')
+                if self.countLivingPlayers < 4 or scarletWoman == None or scarletWoman.alive == False: return False  # after imp killed during the day, scarlet woman needs 4+ players to still live
+                else:
+                    self.characterNames.remove('scarlet_woman')
+                    for m in range(len(self.livingMinions)):
+                        if self.livingMinions[m] == scarletWoman: self.livingMinions.pop(m)
+                    scarletWoman.updatedCharacter = self.character('imp')
+            elif player.updatedCharacter.type == 'minion':
+                for m in range(len(self.livingMinions)):
+                    if self.livingMinions[m] == player: self.livingMinions.pop(m)
 
         for testDay in range(self.day + 1):
             poisoners = 0
             poisonedNames = set()
-            if 'poisoner' in characterNames: poisoners = 1
+            if 'poisoner' in self.characterNames: poisoners = 1
             
             # process night deaths
             
             deadPlayerToday = self.demonKilledPlayers[testDay]
             if deadPlayerToday != None: 
                 if deadPlayerToday.updatedCharacter.name == 'soldier': poisonedNames.add(deadPlayerToday.name)
-                killedPlayer(self.demonKilledPlayers[testDay], True)
+                killedPlayer(self.demonKilledPlayers[testDay], True, queuedReplacementMinionNames)
             
             # process night info
 
@@ -341,8 +398,8 @@ class game:
                                     if spy != None and spy.isFortuneTellerRedHerring: maxCount = 1
                             if info.number < minCount or info.number > maxCount: poisonedNames.add(player.name)
                         case "undertaker":
-                            if len(executedPlayers) == 0: return False # undertaker shouldn't be woken without execution
-                            elif not executedPlayers[-1].canRegisterAsChar(info.character):
+                            if len(self.executedPlayers) == 0: return False # undertaker shouldn't be woken without execution
+                            elif not self.executedPlayers[-1].canRegisterAsChar(info.character):
                                 poisonedNames.add(player.name)
                         case "monk": # considered "info" instead of an action because it's secretly chosen
                             if deadPlayerToday == info.player1:
@@ -361,79 +418,28 @@ class game:
                             if action.result != 'trigger': 
                                 poisonedNames.add(action.player.name) # slayer could be poisoned
                             else:
-                                killedPlayer(action.targetPlayer, False)
+                                killedPlayer(action.targetPlayer, False, queuedReplacementMinionNames)
                         elif not action.targetPlayer.canRegisterAsType('demon'):
                             if action.result == 'trigger': return False
                     elif action.result == 'trigger': return False # spy can't fake the slayer's ability
                     
-                elif action.type == 'was_nominated' and action.player.alive:
+                elif action.type == 'was_nominated' and virginNeverNominated and action.player.alive:
                     if action.player.updatedCharacter.name == 'virgin':
-                        if action.result == 'trigger': killedPlayer(action.targetPlayer, False)
+                        virginNeverNominated = False
+                        if action.result == 'trigger': killedPlayer(action.targetPlayer, False, queuedReplacementMinionNames)
                         if action.targetPlayer.updatedCharacter.type == 'townsfolk': # not spy: spy means anything can happen and player is consistent
                             if action.result != 'trigger': 
-                                poisonedNames.add(action.player) # virgin could be poisoned
+                                poisonedNames.add(action.player.name) # virgin could be poisoned
                         elif not action.targetPlayer.canRegisterAsType('townsfolk'):
                             if action.result == 'trigger': return False
                     elif action.result == 'trigger': return False # spy can't fake the virgin's ability
                 
                 elif action.type == 'was_executed':
                     if player.updatedCharacter.name == 'saint': # the game didn't end because we're solving a puzzle
-                        poisonedNames.add(action.player)
-                    killedPlayer(action.player, False)
-
-                else: raise Exception("Action doesn't make sense.")
+                        poisonedNames.add(action.player.name)
+                    killedPlayer(action.player, False, queuedReplacementMinionNames)
 
                 if len(poisonedNames) > poisoners: return False     
-        
-        def killedPlayer(player, nightDeath):
-            countLivingPlayers -= 1
-            player.alive = False
-            if nightDeath and player.updatedCharacter.name == 'imp':
-                # check if there's a queue
-                if len(self.queuedReplacementMinionNames) > 0:
-                    # just use the first minion in the queue
-                    replacedMinionName = self.queuedReplacementMinionNames.pop(0)
-                    characterNames.remove(replacedMinionName)
-                    self.findPlayerByUpdatedCharacter(replacedMinionName).updatedCharacter = self.character('imp')
-                    for m in range(len(livingMinions)):
-                        if livingMinions[m] == replacedMinion: livingMinions.pop(m)
-                else:
-                    # select any minion
-                    replacedMinion = livingMinions.pop()
-                    replacedMinionNames.append(replacedMinion.updatedCharacter.name)
-                    characterNames.remove(replacedMinion.updatedCharacter.name)
-                    replacedMinion.updatedCharacter = self.character('imp')
-
-                    # enqueue each alternative choice
-                    
-                    if len(livingMinions) > 0:
-                        characterNamesList = []
-                        fortuneTellerRedHerringSeat = None
-                        for p in self.circle:
-                            characterNamesList.append(p.actualCharacter.name)
-                            if p.isFortuneTellerRedHerring: fortuneTellerRedHerringSeat = p.seat
-                    
-                    while len(livingMinions) > 0:
-                        # create a new world to queue, with a list of starting characters and a queue of replacements
-                        minionNamesQueue = []
-                        for name in replacedMinionNames:
-                            minionNamesQueue.append(name)
-                        minionNamesQueue.append(livingMinions.pop().updatedCharacter.name)
-                        self.queuedWorlds.append(self.world(self, characterNamesList, fortuneTellerRedHerringSeat, minionNamesQueue))
-            elif player.updatedCharacter.name == 'imp': # imp was still killed suring the day and game is still going. Replacement must be scarlet woman
-                scarletWoman = self.findPlayerByUpdatedCharacter('scarlet_woman')
-                if countLivingPlayers < 4 or scarletWoman == None or scarletWoman.alive == False: return False  # after imp killed during the day, scarlet woman needs 4+ players to still live
-                else:
-                    characterNames.remove('scarlet_woman')
-                    for m in range(len(livingMinions)):
-                        if livingMinions[m] == scarletWoman: livingMinions.pop(m)
-                    scarletWoman.updatedCharacter = self.character('imp')
-            elif player.updatedCharacter.type == 'minion':
-                for m in range(len(livingMinions)):
-                    if livingMinions[m] == player: livingMinions.pop(m)
-        
-        if self.circle[7].updatedCharacter.name == 'imp' and self.circle[4].updatedCharacter.name == 'spy' and self.circle[2].updatedCharacter.name == 'drunk':
-            print('gisele is imp. poisoned chars is ', len(poisonedNames), ' and poisoners is ', poisoners)
 
         return True
 
@@ -454,9 +460,9 @@ class game:
                 redHerringSeat = None
                 for player in self.circle:
                     consistentCircle.append(player.actualCharacter.name)
+                    solutionDict[player.updatedCharacter.name] = player.name
                     if player.isFortuneTellerRedHerring == True:
                         redHerringSeat = player.seat
-                        solutionDict[player.name] = player.updatedCharacter.name
                     if not player.updatedCharacter == player.actualCharacter:
                         transformationsDict[player.name] = [player.actualCharacter.name, player.updatedCharacter.name]
                 circleTuple = tuple(consistentCircle)
@@ -505,7 +511,7 @@ class game:
 
         print("Checked ", countCheckedConfigs, " configurations with ", drunksCount, "drunks.")
         
-        return solutionDicts       
+        return solutionWorlds       
 
 
 
