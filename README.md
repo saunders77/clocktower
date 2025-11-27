@@ -72,6 +72,10 @@ call when you discover the demon (night) kill
 
 creates or overwrites the player's claimed character. Can be called multiple times if a player changes their claim
 
+### game.next_day()
+
+call right before each night phase after the first
+
 ### game.getAllSolutions()
 
 Returns a dictionary of world solutions describing the players, ordered by seat number. See the world object (below)

@@ -179,7 +179,13 @@ class game:
             self.replacementMinionNamesQueue = replacementMinionNamesQueue
             self.finalCharactersDict = {}
             self.transformationsDict = {}
+            self.startingCharacterDict = {}
 
+        def startersString(self):
+            for c in range(len(self.startingCharacterNamesList)):
+                self.startingCharacterDict[self.startingCharacterNamesList[c]] = self.game.circle[c].name
+            return str(self.startingCharacterDict)
+        
         def __str__(self):
             demons = {}
             deadDemons = {}
@@ -202,9 +208,12 @@ class game:
             if demons['imp'] in self.transformationsDict.keys(): 
                 s += ' (was ' + self.transformationsDict[demons['imp']][0] + ')'
             s += '\n\t'
-            for deadDemonKey in deadDemons.keys():
-                s += deadDemonKey + ': ' + deadDemons[deadDemonKey] + ', '
-            s = s[:-2] + '\n\t'
+            if len(deadDemons.keys()) > 0:
+                for deadDemonKey in deadDemons.keys():
+                    s += deadDemonKey + ': ' + deadDemons[deadDemonKey]
+                    if deadDemons[deadDemonKey] in self.transformationsDict.keys():
+                        s += ' (was ' + self.transformationsDict[deadDemons[deadDemonKey]][0] + ')'
+                s += '\n\t'
             for minionKey in minions.keys():
                 s += minionKey + ': ' + minions[minionKey] + ', '
             s = s[:-2] + '\n\t'
@@ -215,6 +224,15 @@ class game:
                 s += otherKey + ': ' + others[otherKey] + ', ' 
 
             return s[:-2]         
+    
+    def createWorld(self): # useful for debugging
+        startingCharNames = []
+        fortuneTellerRedHerringSeat = None
+        for player in self.circle:
+            startingCharNames.append(player.actualCharacter.name)
+            if player.isFortuneTellerRedHerring: fortuneTellerRedHerringSeat = player.seat     
+        return self.world(self,startingCharNames, fortuneTellerRedHerringSeat)
+
 
     def add_player(self, name, claimedCharacterName=None):
         self.circle.append(self.player(self, name, claimedCharacterName))
@@ -253,7 +271,6 @@ class game:
         return permutations
 
     def isConsistent(self, queuedReplacementMinionNames):
-      
         playerCount = len(self.circle)
         outsiderCount = 0
         self.characterNames = set()
@@ -284,7 +301,6 @@ class game:
         if expectedOutsiders != outsiderCount: return False
 
         def killedPlayer(player, nightDeath, queuedReplacementMinionNames):
-            
             self.countLivingPlayers -= 1
             player.alive = False
             if nightDeath and player.updatedCharacter.name == 'imp':
@@ -295,8 +311,11 @@ class game:
                     self.characterNames.remove(replacedMinionName)
                     self.findPlayerByUpdatedCharacter(replacedMinionName).updatedCharacter = self.character('imp')
                     player.updatedCharacter = self.character('dead_imp')
+                    r = None
                     for m in range(len(self.livingMinions)):
-                        if self.livingMinions[m] == replacedMinion: self.livingMinions.pop(m)
+                        if self.livingMinions[m].updatedCharacter.type == 'demon': r = m
+                    if r == None: raise Exception("Can't find replacement minions.")     
+                    self.livingMinions.pop(r)
                 else:
                     # select any minion
                     
@@ -316,26 +335,30 @@ class game:
                             characterNamesList.append(p.actualCharacter.name)
                             if p.isFortuneTellerRedHerring: fortuneTellerRedHerringSeat = p.seat
                     
-                    while len(self.livingMinions) > 0:
+                    for livingMinion in self.livingMinions:
                         # create a new world to queue, with a list of starting characters and a queue of replacements
                         minionNamesQueue = []
                         for name in self.replacedMinionNames:
                             minionNamesQueue.append(name)
-                        minionNamesQueue.append(self.livingMinions.pop().updatedCharacter.name)
-                        self.queuedWorlds.append(self.world(self, characterNamesList, fortuneTellerRedHerringSeat, minionNamesQueue))
+                        minionNamesQueue.append(livingMinion.updatedCharacter.name)
+                        self.queuedWorlds.append(self.world(self, characterNamesList, fortuneTellerRedHerringSeat, minionNamesQueue))      
             elif player.updatedCharacter.name == 'imp': # imp was still killed suring the day and game is still going. Replacement must be scarlet woman
                 scarletWoman = self.findPlayerByUpdatedCharacter('scarlet_woman')
                 if self.countLivingPlayers < 4 or scarletWoman == None or scarletWoman.alive == False: return False  # after imp killed during the day, scarlet woman needs 4+ players to still live
                 else:
                     self.characterNames.remove('scarlet_woman')
+                    s = None
                     for m in range(len(self.livingMinions)):
-                        if self.livingMinions[m] == scarletWoman: self.livingMinions.pop(m)
+                        if self.livingMinions[m] == scarletWoman: s = m
+                    if s == None: raise Exception("Can't find scarlet woman among living minions. " + self.createWorld().startersString() + " and replacement queue is " + str(queuedReplacementMinionNames))
+                    else: self.livingMinions.pop(s)
                     scarletWoman.updatedCharacter = self.character('imp')
                 player.updatedCharacter = self.character('dead_imp')
             elif player.updatedCharacter.type == 'minion':
                 for m in range(len(self.livingMinions)):
-                    if self.livingMinions[m] == player: self.livingMinions.pop(m)
-            
+                    if self.livingMinions[m] == player: 
+                        self.livingMinions.pop(m)
+                        return True # can only do this if no checks follow in this function
             return True
 
         for testDay in range(self.day + 1):
