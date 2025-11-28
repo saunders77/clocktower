@@ -305,7 +305,6 @@ class game:
             self.countLivingPlayers -= 1
             player.alive = False
             if nightDeath and player.updatedCharacter.name == 'imp':
-                
                 if len(self.livingMinions) < 1: return False # the imp can't kill itself if no minions remain
                 # check if there's a queue
                 if len(queuedReplacementMinionNames) > 0:
@@ -361,11 +360,13 @@ class game:
                     scarletWoman.updatedCharacter = self.character('imp')
                 player.updatedCharacter = self.character('dead_imp')
             elif player.updatedCharacter.type == 'minion':
+                self.characterNames.remove(player.updatedCharacter.name)
                 for m in range(len(self.livingMinions)):
                     if self.livingMinions[m] == player: 
                         self.livingMinions.pop(m)
                         return True # can only do this if no checks follow in this function
-            
+            else:
+                self.characterNames.remove(player.updatedCharacter.name)
             return True
 
         for testDay in range(self.day + 1):
@@ -453,7 +454,6 @@ class game:
                                     spy = self.findPlayerByUpdatedCharacter('spy')
                                     if spy != None and spy.isFortuneTellerRedHerring: maxCount = 1
                             if info.number < minCount or info.number > maxCount: poisonedNames.add(player.name)
-                        case "undertaker":
                             if len(self.executedPlayers) == 0: return False # undertaker shouldn't be woken without execution
                             elif not self.executedPlayers[-1].canRegisterAsChar(info.character):
                                 poisonedNames.add(player.name)
