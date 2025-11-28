@@ -44,7 +44,10 @@ g.players['kota'].nominate('fran',None)
 
 g.players['drinks'].executed_by_vote()
 
-#g.next_day()
+g.next_day()
+g.players['ekin'].was_killed_at_night()
+g.players['fran'].add_info(1)
+g.players['bruce'].add_info(1,'poisoner')
 
 
 # get solutions
