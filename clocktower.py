@@ -279,6 +279,8 @@ class game:
         self.livingMinions = []
         self.executedPlayers = []
         self.replacedMinionNames = []
+        self.fortuneTellerRedHerring = None
+        self.redHerringCanMove = False
         drunk = None
         virginNeverNominated = True
         
@@ -286,6 +288,9 @@ class game:
             player.alive = True
             if player.actualCharacter.name in self.characterNames: return False
             self.characterNames.add(player.actualCharacter.name)
+            if player.isFortuneTellerRedHerring:
+                self.fortuneTellerRedHerring = player
+                if player.canRegisterAsAlignment('evil'): self.redHerringCanMove = True # must be recluse or spy red herring
             if player.isMe and player.actualCharacter.name not in {'drunk', player.claimedCharacter.name}:
                 return False
             elif player.actualCharacter.name == 'drunk':
@@ -440,20 +445,17 @@ class game:
                             elif info.player1.mustRegisterAsType('minion') and info.player2.mustRegisterAsType('minion'):
                                 minCount = 0
                                 maxCount = 0
-                            elif info.player1.isFortuneTellerRedHerring: 
+                            elif self.redHerringCanMove:
+                                minCount = 0
                                 maxCount = 1
-                                if info.player1.mustRegisterAsAlignment('good'): minCount = 1
-                            elif info.player2.isFortuneTellerRedHerring: 
+                            elif info.player1.isFortuneTellerRedHerring or info.player2.isFortuneTellerRedHerring: 
+                                minCount = 1
                                 maxCount = 1
-                                if info.player2.mustRegisterAsAlignment('good'): minCount = 1
-                            elif info.player1.canRegisterAsType('demon') or info.player2.canRegisterAsType('demon'): maxCount = 1
-                            else: # this spy/recluse checking may leave in more solutions than what are stricly possile because it's difficult to keep track of moving red herrings. No solutions will be missed, however.
-                                recluse = self.findPlayerByUpdatedCharacter('recluse')
-                                if recluse != None and recluse .isFortuneTellerRedHerring: maxCount = 1
-                                else:
-                                    spy = self.findPlayerByUpdatedCharacter('spy')
-                                    if spy != None and spy.isFortuneTellerRedHerring: maxCount = 1
+                            elif info.player1.canRegisterAsType('demon') or info.player2.canRegisterAsType('demon'): # there's a recluse and a non-demon non-herring
+                                minCount = 0
+                                maxCount = 1 
                             if info.number < minCount or info.number > maxCount: poisonedNames.add(player.name)
+                        case "undertaker":
                             if len(self.executedPlayers) == 0: return False # undertaker shouldn't be woken without execution
                             elif not self.executedPlayers[-1].canRegisterAsChar(info.character):
                                 poisonedNames.add(player.name)
@@ -527,7 +529,9 @@ class game:
                     solutionWorld = self.world(self, consistentCircle, redHerringSeat)
                     solutionWorld.finalCharactersDict = solutionDict
                     solutionWorld.transformationsDict = transformationsDict
-                    solutionWorlds.append(solutionWorld)           
+                    solutionWorlds.append(solutionWorld)
+                return True
+            return False       
 
         (townsfolkCount, outsidersCount, minionsCount, demonsCount) = self.characterCounts[len(self.circle)]
         if drunksCount > outsidersCount: return consistentCircles
@@ -545,7 +549,9 @@ class game:
                 for player in self.circle:
                     if player.claimedCharacter.name in {'fortune_teller','fortuneteller'}: fortuneTellerClaimed = True
                 if fortuneTellerClaimed:
-                    for herring in self.circle:
+                    herringIndex = 0
+                    while herringIndex < len(self.circle):
+                        herring = self.circle[herringIndex]
                         for player in self.circle:
                             player.isFortuneTellerRedHerring = False
                             player.set_character(player.claimedCharacter.name)
@@ -553,7 +559,8 @@ class game:
                             self.circle[wrongCharPerm[i]].set_character(wrongCharList[i])
                         if herring.canRegisterAsAlignment('good'):
                             herring.isFortuneTellerRedHerring = True
-                        recordIfConsistent()                     
+                        if recordIfConsistent(): herringIndex = len(self.circle) # exit the loop. already found consistent one                     
+                        else: herringIndex += 1
                 else:
                     for player in self.circle:
                         player.isFortuneTellerRedHerring = False
