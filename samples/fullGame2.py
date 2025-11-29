@@ -93,3 +93,9 @@ g.players['art'].add_info(0, 'imp','fran','ryback')
 solutions = g.getAllSolutions(False)
 print("Found ",len(solutions), " solutions:")
 for solution in solutions: print(solution)
+print(g.get_analytics())
+
+# analytics output
+# 259 valid configurations:
+# {'ekin': 0.0, 'fran': 0.0, 'kota': 0.0, 'dem': 0.0, 'reznora': 0.077, 'ryback': 0.521, 'tapir': 0.0, 'bruce': 0.0, 'art': 0.402, 'josh': 0.0, 'malashaan': 0.0, 'drinks': 0.0}
+

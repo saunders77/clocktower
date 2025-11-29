@@ -84,7 +84,7 @@ All returned lists have the potential to satisfy all the constraints, but soluti
 
 fortune_teller_red_herring_can_move_rule = False prevents the storyteller from picking the recluse/spy as the fortune teller's red herring, and then being able to choose a new red herring on a subsequent turn at will.
 
-### g.world
+### game.world
 
 Describes a solution, returned in a list via game.getAllSolutions() (above)
 
@@ -94,6 +94,10 @@ Properties include:
 -world.fortuneTellerRedHerringSeat, an 0-based index corresponding to the seat position of the player who was the fortune teller's red herring (if any), based on the order in which the players were added to the game. Otherwise, None 
 
 str(world) yields a user-readable solution (same for print(world))
+
+### game.get_analytics()
+
+Call after game.getAllSolutions(). Returns an analytics object. Call print() or str() with it to see a summary of solutions data
 
 ## Samples: 
 

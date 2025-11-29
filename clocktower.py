@@ -6,6 +6,7 @@ class game:
         self.demonKilledPlayers = [None] # indexed by the day after kill
         self.dailyActions = [[]]
         self.redHerringCanMoveRule = True
+        self.solutions = [] # "world" class objects
 
         # for solving: 
         self.queuedWorlds = []
@@ -226,14 +227,39 @@ class game:
                 s += otherKey + ': ' + others[otherKey] + ', ' 
 
             return s[:-2]         
-    
+
+    class analytics:
+        def __init__(self, valid_configurations_count, imp_counts, imp_fractions):
+            self.valid_configurations_count = valid_configurations_count
+            self.imp_counts = imp_counts
+            self.imp_fractions = imp_fractions
+
+        def __str__(self):
+            return str(self.valid_configurations_count) + ' valid configurations:\n' + str(self.imp_fractions)    
+
+    def get_analytics(self):
+        if self.solutions == []: raise Exception("No solutions for generating analytics.")
+        self.valid_configurations_count = len(self.solutions)
+
+        # count how many times each player is the updated imp:
+        self.imp_counts = {} 
+        for player in self.circle: self.imp_counts[player.name] = 0
+        for solution in self.solutions:
+            self.imp_counts[solution.finalCharactersDict['imp']] += 1
+
+        self.imp_fractions = {}
+        for name in self.imp_counts.keys():
+            self.imp_fractions[name] = round(self.imp_counts[name] / self.valid_configurations_count, 3)
+        
+        return self.analytics(self.valid_configurations_count, self.imp_counts, self.imp_fractions)
+
     def createWorld(self): # useful for debugging
         startingCharNames = []
         fortuneTellerRedHerringSeat = None
         for player in self.circle:
             startingCharNames.append(player.actualCharacter.name)
             if player.isFortuneTellerRedHerring: fortuneTellerRedHerringSeat = player.seat     
-        return self.world(self,startingCharNames, fortuneTellerRedHerringSeat)
+        return self(self,startingCharNames, fortuneTellerRedHerringSeat)
 
 
     def add_player(self, name, claimedCharacterName=None):
@@ -582,7 +608,7 @@ class game:
             recordIfConsistent(world.replacementMinionNamesQueue)
 
         print("Checked ", countCheckedConfigs, " configurations with ", drunksCount, "drunks.")
-        
-        return solutionWorlds
+        self.solutions = solutionWorlds
+        return self.solutions
 
 clocktower = game # back-compat

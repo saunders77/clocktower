@@ -63,3 +63,8 @@ g.players["ellen"].was_killed_at_night()
 solutions = g.getAllSolutions(False)
 print("Found ",len(solutions), " solutions:")
 for solution in solutions: print(solution)
+print(g.get_analytics())
+
+# analytics output:
+# 184 valid configurations:
+# {'george': 0.391, 'ellen': 0.0, 'raj': 0.0, 'lorinda': 0.0, 'jc': 0.0, 'alex': 0.429, 'daniel': 0.0, 'amy': 0.179, 'claire': 0.0}
