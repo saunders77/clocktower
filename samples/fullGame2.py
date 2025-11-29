@@ -90,6 +90,6 @@ g.players['art'].add_info(0, 'imp','fran','ryback')
 
 # get solutions
 
-solutions = g.getAllSolutions()
+solutions = g.getAllSolutions(False)
 print("Found ",len(solutions), " solutions:")
 for solution in solutions: print(solution)

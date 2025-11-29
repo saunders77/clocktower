@@ -5,6 +5,7 @@ class game:
         self.day = 0
         self.demonKilledPlayers = [None] # indexed by the day after kill
         self.dailyActions = [[]]
+        self.redHerringCanMoveRule = True
 
         # for solving: 
         self.queuedWorlds = []
@@ -290,7 +291,7 @@ class game:
             self.characterNames.add(player.actualCharacter.name)
             if player.isFortuneTellerRedHerring:
                 self.fortuneTellerRedHerring = player
-                if player.canRegisterAsAlignment('evil'): self.redHerringCanMove = True # must be recluse or spy red herring
+                if player.canRegisterAsAlignment('evil') and self.redHerringCanMoveRule: self.redHerringCanMove = True # must be recluse or spy red herring
             if player.isMe and player.actualCharacter.name not in {'drunk', player.claimedCharacter.name}:
                 return False
             elif player.actualCharacter.name == 'drunk':
@@ -501,11 +502,12 @@ class game:
                 if len(poisonedNames) > poisoners: return False     
         return True
 
-    def getAllSolutions(self, drunksCount=None):
+    def getAllSolutions(self, movingRedHerringsAllowed=True, drunksCount=None):
+        if movingRedHerringsAllowed == False: self.redHerringCanMoveRule = False # technically the storyteller can start the red herring as the spy or recluse, and then move it to another player whenever desired. This setting bans/ignores that
         initialWrongCharList = ['imp'] # wrongCharList will be a unique combination (not permutation) of possible wrongly-claimed characters 
         if drunksCount == 1: initialWrongCharList.append('drunk')
         elif drunksCount == None:
-            return self.getAllSolutions(0) + self.getAllSolutions(1)
+            return self.getAllSolutions(movingRedHerringsAllowed, 0) + self.getAllSolutions(movingRedHerringsAllowed, 1)
 
         countCheckedConfigs = 0
         consistentCircles = set()
