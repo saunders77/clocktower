@@ -52,5 +52,7 @@ for solution in solutions: print(solution)
 print(g.get_analytics())
 
 # analytics output
-# 12 valid configurations:
-# {'doug': 0.0, 'ben': 0.0, 'carley': 0.0, 'theo': 0.583, 'marianna': 0.0, 'lachlan': 0.0, 'hayley': 0.417, 'filip': 0.0}
+# 10 valid configurations:
+# {'doug': 0.0, 'ben': 0.0, 'carley': 0.0, 'theo': 0.2, 'marianna': 0.0, 'lachlan': 0.0, 'hayley': 0.8, 'filip': 0.0}
+# 7 valid configurations without lucky poisoners:
+# {'doug': 0.0, 'ben': 0.0, 'carley': 0.0, 'theo': 0.0, 'marianna': 0.0, 'lachlan': 0.0, 'hayley': 1.0, 'filip': 0.0}

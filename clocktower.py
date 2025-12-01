@@ -3,7 +3,7 @@ class game:
         self.circle = [] # ordered list of players by seat
         self.players = {} # dictionary to reference players by name
         self.day = 0
-        self.demonKilledPlayers = [None] # indexed by the day after kill
+        
         self.dailyActions = [[]]
         self.meta_redHerringCanMoveRule = True
         self.meta_minInfoRolesCount = 0
@@ -11,6 +11,9 @@ class game:
 
         # for solving: 
         self.queuedWorlds = []
+        self.demonKilledPlayers = [None] # indexed by the day after kill
+        self.poisonsBlockingInfo = []
+
 
         if script in {'trouble_brewing','troublebrewing'}:
             self.characterCounts = { # (townsfolk, outsiders, minions, demons)
@@ -183,11 +186,21 @@ class game:
             self.finalCharactersDict = {}
             self.transformationsDict = {}
             self.startingCharacterDict = {}
+            self.poisonsBlockingInfo = []
+            self.blockingPoisonsCount = 0
+            for turnPoison in self.game.poisonsBlockingInfo: 
+                self.poisonsBlockingInfo.append(turnPoison)
+                if turnPoison: self.blockingPoisonsCount += 1
 
         def startersString(self):
             for c in range(len(self.startingCharacterNamesList)):
                 self.startingCharacterDict[self.startingCharacterNamesList[c]] = self.game.circle[c].name
             return str(self.startingCharacterDict)
+        
+        def hasGreatPoisoner(self):
+            if self.blockingPoisonsCount > 0 and self.poisonsBlockingInfo[0]: 
+                return True
+            return False
         
         def __str__(self):
             demons = {}
@@ -206,6 +219,8 @@ class game:
                 elif charName in self.game.minionNames: minions[charName] = self.finalCharactersDict[charName]
                 elif charName in {'drunk'}: drunks[charName] = self.finalCharactersDict[charName]
                 else: others[charName] = self.finalCharactersDict[charName]
+
+
 
             s = 'IMP: '
             if 'imp' in demons.keys(): s += demons['imp']
@@ -226,33 +241,52 @@ class game:
             s = s[:-2] + '\n\t'
             for otherKey in others.keys():
                 s += otherKey + ': ' + others[otherKey] + ', ' 
-
-            return s[:-2]         
+            s = s[:-2]  
+            if len(self.poisonsBlockingInfo) > 0:
+                s += '\n\t' + str(self.blockingPoisonsCount) + '/' + str(len(self.poisonsBlockingInfo)) + ' info-blocking or action-blocking poisonings'
+                if self.blockingPoisonsCount > 0 and self.poisonsBlockingInfo[0]: s += ', including the first night'
+            return s     
 
     class analytics:
-        def __init__(self, valid_configurations_count, imp_counts, imp_fractions):
+        def __init__(self, valid_configurations_count, imp_counts, imp_fractions, gp_valid_configurations_count, gp_imp_counts, gp_imp_fractions):
             self.valid_configurations_count = valid_configurations_count
             self.imp_counts = imp_counts
             self.imp_fractions = imp_fractions
 
+            # gp means "great poisoner"
+
+            self.gp_valid_configurations_count = gp_valid_configurations_count
+            self.gp_imp_counts = gp_imp_counts
+            self.gp_imp_fractions = gp_imp_fractions
+
+
         def __str__(self):
-            return str(self.valid_configurations_count) + ' valid configurations:\n' + str(self.imp_fractions)    
+            r = str(self.valid_configurations_count) + ' valid configurations:\n' + str(self.imp_fractions) + '\n' 
+            r += str(self.gp_valid_configurations_count) + ' valid configurations without lucky poisoners:\n' + str(self.gp_imp_fractions)
+            return r
 
     def get_analytics(self):
         if self.solutions == []: raise Exception("No solutions for generating analytics.")
         self.valid_configurations_count = len(self.solutions)
+        self.gp_valid_configurations_count = self.valid_configurations_count # gp means "great poisoner"
 
         # count how many times each player is the updated imp:
-        self.imp_counts = {} 
-        for player in self.circle: self.imp_counts[player.name] = 0
+        self.imp_counts = {}
+        self.gp_imp_counts = {} 
+        for player in self.circle: 
+            self.imp_counts[player.name] = 0
+            self.gp_imp_counts[player.name] = 0
         for solution in self.solutions:
             self.imp_counts[solution.finalCharactersDict['imp']] += 1
+            if solution.hasGreatPoisoner() == False: self.gp_imp_counts[solution.finalCharactersDict['imp']] += 1
+            else: self.gp_valid_configurations_count -= 1
 
         self.imp_fractions = {}
+        self.gp_imp_fractions = {}
         for name in self.imp_counts.keys():
             self.imp_fractions[name] = round(self.imp_counts[name] / self.valid_configurations_count, 3)
-        
-        return self.analytics(self.valid_configurations_count, self.imp_counts, self.imp_fractions)
+            self.gp_imp_fractions[name] = round(self.gp_imp_counts[name] / self.gp_valid_configurations_count, 3)
+        return self.analytics(self.valid_configurations_count, self.imp_counts, self.imp_fractions, self.gp_valid_configurations_count, self.gp_imp_counts, self.gp_imp_fractions)
 
     def createWorld(self): # useful for debugging
         startingCharNames = []
@@ -308,6 +342,7 @@ class game:
         self.livingMinions = []
         self.executedPlayers = []
         self.replacedMinionNames = []
+        self.poisonsBlockingInfo = []
         self.fortuneTellerRedHerring = None
         self.redHerringCanMove = False
         drunk = None
@@ -391,7 +426,7 @@ class game:
                     s = None
                     for m in range(len(self.livingMinions)):
                         if self.livingMinions[m] == scarletWoman: s = m
-                    if s == None: raise Exception("Can't find scarlet woman among living minions. " + self.createWorld().startersString() + " and replacement queue is " + str(queuedReplacementMinionNames))
+                    if s == None: raise Exception("Can't find scarlet woman among living minions. ")
                     else: 
                         self.livingMinions.pop(s)
                     scarletWoman.updatedCharacter = self.character('imp')
@@ -530,7 +565,10 @@ class game:
                         poisonedNames.add(action.player.name)
                     if killedPlayer(action.player, False, queuedReplacementMinionNames) == False: return False
 
-                if len(poisonedNames) > poisoners: return False     
+                if len(poisonedNames) > poisoners: return False
+
+            if len(poisonedNames) == 1: self.poisonsBlockingInfo.append(True)
+            elif poisoners == 1: self.poisonsBlockingInfo.append(False)  # the poisoner failed to block info or actions   
         return True
 
     def getAllSolutions(self, meta_movingRedHerringsAllowed=True, meta_minInfoRoles=0, drunksCount=None):
@@ -614,7 +652,8 @@ class game:
             recordIfConsistent(world.replacementMinionNamesQueue)
 
         print("Checked ", countCheckedConfigs, " configurations with ", drunksCount, "drunks.")
-        self.solutions += solutionWorlds
-        return self.solutions
+        for sol in solutionWorlds:
+            self.solutions.append(sol)
+        return solutionWorlds
 
 clocktower = game # back-compat

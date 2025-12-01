@@ -98,4 +98,5 @@ print(g.get_analytics())
 # analytics output
 # 259 valid configurations:
 # {'ekin': 0.0, 'fran': 0.0, 'kota': 0.0, 'dem': 0.0, 'reznora': 0.077, 'ryback': 0.521, 'tapir': 0.0, 'bruce': 0.0, 'art': 0.402, 'josh': 0.0, 'malashaan': 0.0, 'drinks': 0.0}
-
+# 17 valid configurations without lucky poisoners:
+# {'ekin': 0.0, 'fran': 0.0, 'kota': 0.0, 'dem': 0.0, 'reznora': 0.0, 'ryback': 0.412, 'tapir': 0.0, 'bruce': 0.0, 'art': 0.588, 'josh': 0.0, 'malashaan': 0.0, 'drinks': 0.0}

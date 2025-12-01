@@ -95,7 +95,8 @@ Describes a solution, returned in a list via game.getAllSolutions() (above)
 Properties include:
 -world.finalCharactersDict, a dictionary with all characters, with the keys as final character names and the values as the player names
 -world.transformationsDict, a dictionary with all players who changed character. The keys are the player name and the values are 2-element lists with the [0] element as the starting character and the [1] element as the ending character
--world.fortuneTellerRedHerringSeat, an 0-based index corresponding to the seat position of the player who was the fortune teller's red herring (if any), based on the order in which the players were added to the game. Otherwise, None 
+-world.fortuneTellerRedHerringSeat, an 0-based index corresponding to the seat position of the player who was the fortune teller's red herring (if any), based on the order in which the players were added to the game. Otherwise, None
+-world.poisonsBlockingInfo, an array of turns where the poisoner blocked info (True) or did not (False) 
 
 str(world) yields a user-readable solution (same for print(world))
 
