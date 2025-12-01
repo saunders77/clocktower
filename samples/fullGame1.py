@@ -60,7 +60,7 @@ g.players["ellen"].was_killed_at_night()
 
 # get solutions
 
-solutions = g.getAllSolutions(False)
+solutions = g.getAllSolutions(False, 2)
 print("Found ",len(solutions), " solutions:")
 for solution in solutions: print(solution)
 print(g.get_analytics())

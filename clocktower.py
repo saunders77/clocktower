@@ -5,7 +5,8 @@ class game:
         self.day = 0
         self.demonKilledPlayers = [None] # indexed by the day after kill
         self.dailyActions = [[]]
-        self.redHerringCanMoveRule = True
+        self.meta_redHerringCanMoveRule = True
+        self.meta_minInfoRolesCount = 0
         self.solutions = [] # "world" class objects
 
         # for solving: 
@@ -300,6 +301,7 @@ class game:
 
     def isConsistent(self, queuedReplacementMinionNames):
         playerCount = len(self.circle)
+        infoRolesCount = 0
         outsiderCount = 0
         self.characterNames = set()
         self.countLivingPlayers = playerCount
@@ -314,10 +316,12 @@ class game:
         for player in self.circle:
             player.alive = True
             if player.actualCharacter.name in self.characterNames: return False
+            if player.actualCharacter.name in {'washerwoman','librarian','investigator','chef','empath','fortune_teller','undertaker'}:
+                infoRolesCount += 1
             self.characterNames.add(player.actualCharacter.name)
             if player.isFortuneTellerRedHerring:
                 self.fortuneTellerRedHerring = player
-                if player.canRegisterAsAlignment('evil') and self.redHerringCanMoveRule: self.redHerringCanMove = True # must be recluse or spy red herring
+                if player.canRegisterAsAlignment('evil') and self.meta_redHerringCanMoveRule: self.redHerringCanMove = True # must be recluse or spy red herring
             if player.isMe and player.actualCharacter.name not in {'drunk', player.claimedCharacter.name}:
                 return False
             elif player.actualCharacter.name == 'drunk':
@@ -328,6 +332,7 @@ class game:
             elif player.actualCharacter.type == 'minion': self.livingMinions.append(player)
         
         if drunk != None and drunk.claimedCharacter.name in self.characterNames: return False # drunk can't think they're a character that's actually in play
+        if infoRolesCount < self.meta_minInfoRolesCount: return False
 
         expectedOutsiders = self.characterCounts[playerCount][1]
         if 'baron' in self.characterNames: expectedOutsiders = expectedOutsiders + 2
@@ -528,12 +533,13 @@ class game:
                 if len(poisonedNames) > poisoners: return False     
         return True
 
-    def getAllSolutions(self, movingRedHerringsAllowed=True, drunksCount=None):
-        if movingRedHerringsAllowed == False: self.redHerringCanMoveRule = False # technically the storyteller can start the red herring as the spy or recluse, and then move it to another player whenever desired. This setting bans/ignores that
+    def getAllSolutions(self, meta_movingRedHerringsAllowed=True, meta_minInfoRoles=0, drunksCount=None):
+        if meta_movingRedHerringsAllowed == False: self.meta_redHerringCanMoveRule = False # technically the storyteller can start the red herring as the spy or recluse, and then move it to another player whenever desired. This setting bans/ignores that
+        self.meta_minInfoRolesCount = meta_minInfoRoles
         initialWrongCharList = ['imp'] # wrongCharList will be a unique combination (not permutation) of possible wrongly-claimed characters 
         if drunksCount == 1: initialWrongCharList.append('drunk')
         elif drunksCount == None:
-            return self.getAllSolutions(movingRedHerringsAllowed, 0) + self.getAllSolutions(movingRedHerringsAllowed, 1)
+            return self.getAllSolutions(meta_movingRedHerringsAllowed, meta_minInfoRoles, 0) + self.getAllSolutions(meta_movingRedHerringsAllowed, meta_minInfoRoles, 1)
 
         countCheckedConfigs = 0
         consistentCircles = set()
@@ -608,7 +614,7 @@ class game:
             recordIfConsistent(world.replacementMinionNamesQueue)
 
         print("Checked ", countCheckedConfigs, " configurations with ", drunksCount, "drunks.")
-        self.solutions = solutionWorlds
+        self.solutions += solutionWorlds
         return self.solutions
 
 clocktower = game # back-compat

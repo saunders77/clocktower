@@ -76,13 +76,17 @@ creates or overwrites the player's claimed character. Can be called multiple tim
 
 call right before each night phase after the first
 
-### game.getAllSolutions(fortune_teller_red_herring_can_move_rule = True)
+### game.getAllSolutions(fortune_teller_red_herring_can_move_rule = True, min_info_roles_count = 0)
 
 Returns a dictionary of world solutions describing the players, ordered by seat number. See the world object (below)
 
 All returned lists have the potential to satisfy all the constraints, but solutions may be improbable or require poor decisions from the players or storyteller (but not breaking any game rules).
 
-fortune_teller_red_herring_can_move_rule = False prevents the storyteller from picking the recluse/spy as the fortune teller's red herring, and then being able to choose a new red herring on a subsequent turn at will.
+There are several meta assumptions which can be changed to further restrict possible worlds:
+
+-fortune_teller_red_herring_can_move_rule can be set False to assume the storyteller won't pick the recluse/spy as the fortune teller's red herring, and then being able to choose a new red herring on a subsequent turn at will.
+
+-min_info_roles_count assumes the storyteller will pick at least a certain number of true townsfolk roles that are guaranteed to get information
 
 ### game.world
 
