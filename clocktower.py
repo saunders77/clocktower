@@ -501,6 +501,9 @@ class game:
                             if rightNeighbour.canRegisterAsAlignment('evil'): maxCount += 1
                             if not rightNeighbour.canRegisterAsAlignment('good'): minCount += 1
 
+                            if self.players['jackson'].updatedCharacter.name == 'imp' and self.players['krisey'].updatedCharacter.name == 'poisoner' and self.players['mike'].updatedCharacter.name == 'drunk' and testDay == 3:
+                                print('day3 empath: min/max:' + str(minCount) + '/' + str(maxCount))   
+
                             if info.number < minCount or info.number > maxCount: poisonedNames.add(player.name)
                         case "fortune_teller" | "fortuneteller":
                             minCount = 0
@@ -565,7 +568,7 @@ class game:
                         poisonedNames.add(action.player.name)
                     if killedPlayer(action.player, False, queuedReplacementMinionNames) == False: return False
 
-                if len(poisonedNames) > poisoners: return False
+                if len(poisonedNames) > poisoners: return False     
 
             if len(poisonedNames) == 1: self.poisonsBlockingInfo.append(True)
             elif poisoners == 1: self.poisonsBlockingInfo.append(False)  # the poisoner failed to block info or actions   

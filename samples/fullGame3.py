@@ -1,4 +1,4 @@
-# https://www.youtube.com/watch?v=EsTXhFKtER8
+# https://www.youtube.com/watch?v=IVON7yLh92g
 
 import clocktower
 
@@ -52,7 +52,7 @@ for solution in solutions: print(solution)
 print(g.get_analytics())
 
 # analytics output
-# 10 valid configurations:
-# {'doug': 0.0, 'ben': 0.0, 'carley': 0.0, 'theo': 0.2, 'marianna': 0.0, 'lachlan': 0.0, 'hayley': 0.8, 'filip': 0.0}
-# 7 valid configurations without lucky poisoners:
-# {'doug': 0.0, 'ben': 0.0, 'carley': 0.0, 'theo': 0.0, 'marianna': 0.0, 'lachlan': 0.0, 'hayley': 1.0, 'filip': 0.0}
+# 66 valid configurations:
+# {'athena': 0.0, 'nene': 0.0, 'important': 0.0, 'katherine': 0.0, 'jackson': 0.258, 'graymason': 0.576, 'krisey': 0.0, 'mike': 0.167}
+# 45 valid configurations without lucky poisoners:
+# {'athena': 0.0, 'nene': 0.0, 'important': 0.0, 'katherine': 0.0, 'jackson': 0.222, 'graymason': 0.689, 'krisey': 0.0, 'mike': 0.089}

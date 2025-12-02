@@ -56,7 +56,7 @@ call when a player publicly attempts to slay. result is None if the target doesn
 
 ### player.nominate(nominee_name, result)
 
-Nominations must be recorded in actions, even if they do not trigger an execution (otherwise some Virgin solutions can't be excluded).
+Nominations must be recorded in actions the first time each player is nominated, even if they do not trigger an execution (otherwise some Virgin solutions can't be excluded).
 
 result is None if the player nominating survives. If the player nominating dies, result is 'trigger' or True if the nominating player dies (would be from nominating the virgin)
 
