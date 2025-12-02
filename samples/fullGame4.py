@@ -19,7 +19,7 @@ g.add_player('mike', 'undertaker')
 
 g.players['nene'].add_info(0)
 g.players['important'].add_info(1,'drunk','jackson','mike')
-g.players['athena'].add_info(0,'demon','mike','nene')
+g.players['athena'].add_info(0, None,'mike','nene')
 g.players['graymason'].add_info(1)
 g.players['important'].nominate('graymason',None)
 g.players['jackson'].nominate('important',None)

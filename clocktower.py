@@ -35,15 +35,47 @@ class game:
                 2: [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]],
                 3: [[0,1,2],[0,1,3],[0,2,3],[1,2,3]]
             }
+            self.scriptCharacters = {
+                'washerwoman',
+                'librarian',
+                'investigator',
+                'chef',
+                'empath',
+                'fortune_teller',
+                'undertaker',
+                'monk',
+                'ravenkeeper',
+                'virgin',
+                'slayer',
+                'soldier',
+                'mayor',
+                'butler',
+                'drunk',
+                'recluse',
+                'saint',
+                'poisoner',
+                'spy',
+                'scarlet_woman',
+                'baron',
+                'imp',
+                'dead_imp'
+            }
+            self.scriptActions = {
+                'slay',
+                'was_nominated',
+                'was_executed'
+            }
+        else: raise Exception("Script not supported. Currently supports: ['trouble_brewing'].")
     
     class player:
         def __init__(self, parent, name, claimedCharacterName=None):
-            self.name = name
+            if type(name) is not str: raise Exception("Players must have a name.")
+            self.name = name.lower()
             self.game = parent
             self.seat = 0
-            self.isMe = (name == 'you')
+            self.isMe = (name.lower() == 'you')
             self.claimedCharacter = None
-            if(claimedCharacterName): self.claimedCharacter = self.game.character(claimedCharacterName)
+            if(claimedCharacterName): self.claimedCharacter = self.game.character(self.game, claimedCharacterName)
             
             self.claimedInfos = [None] # array of daytimes, one info per day following the info
             self.actions = [[]] # array of daytimes. Each daytime can have multiple actions
@@ -57,13 +89,15 @@ class game:
             return self.name == other.name
 
         def claim(self, claimedCharacterName):
-            self.claimedCharacter = self.game.character(claimedCharacterName)
+            self.claimedCharacter = self.game.character(self.game, claimedCharacterName)
 
         def add_info(self, number=None, characterName=None, name1=None, name2=None):
             self.claimedInfos[self.game.day] = self.info(self, number, characterName, name1, name2)
         
         def previous_info(self, nightNumber, number=None, characterName=None, name1=None, name2=None):
             # nightNumber starts with the 0th night and corresponds to the day after
+            if (type(nightNumber) is not int) or nightNumber < 0 or nightNumber > self.game.day: 
+                raise Exception("Provide a valid index for the night when the info was received.")
             self.claimedInfos[nightNumber] = self.info(self, number, characterName, name1, name2)
 
         def add_action(self, actionType=None, targetName=None, result=None):
@@ -77,13 +111,15 @@ class game:
 
         def executed_by_vote(self):
             self.add_action('was_executed')
+        was_executed_by_vote = executed_by_vote
 
         def was_killed_at_night(self):
             self.game.demonKilledPlayers.append(self)
+        killed_at_night = was_killed_at_night
 
         def set_character(self, characterName): # to be used only during solving
-            self.actualCharacter = self.game.character(characterName)
-            self.updatedCharacter = self.game.character(characterName)
+            self.actualCharacter = self.game.character(self.game, characterName)
+            self.updatedCharacter = self.game.character(self.game, characterName)
         
         def canRegisterAsChar(self, character):
             if character == self.updatedCharacter: return True
@@ -116,26 +152,47 @@ class game:
         class info:
             def __init__(self, parent, number=None, characterName=None, name1=None, name2=None):
                 self.player = parent
+                if number != None and ((type(number) is not int) or number < 0): 
+                    raise Exception("Provide a valid number for the character's info.")
                 self.number = number
                 self.character = None
-                if(characterName): self.character = self.player.game.character(characterName)
+                if(characterName): 
+                    if characterName.lower() not in self.player.game.scriptCharacters:
+                        raise Exception("Character '" + str(characterName.lower()) + "' is not in the selected script.")
+                    self.character = self.player.game.character(self.player.game, characterName.lower())
                 self.player1 = None
-                if(name1): self.player1 = self.player.game.players[name1]
+                if(name1): 
+                    if name1.lower() not in self.player.game.players.keys():
+                        raise Exception("There is no player with this name.")
+                    self.player1 = self.player.game.players[name1.lower()]
                 self.player2 = None
-                if(name2): self.player2 = self.player.game.players[name2]
+                if(name2): 
+                    if name2.lower() not in self.player.game.players.keys():
+                        raise Exception("There is no player with this name.")
+                    self.player2 = self.player.game.players[name2.lower()]
 
         class action:
             def __init__(self, parent, actionType, targetName=None, result=None):
                 self.player = parent
-                self.type = actionType
+                if actionType.lower() not in self.player.game.scriptActions: 
+                    raise Exception("Action not supported in the selected script.")
+                self.type = actionType.lower()
                 self.targetPlayer = None
-                if(targetName): self.targetPlayer = self.player.game.players[targetName]
-                self.result = result
+                if targetName != None and targetName.lower() not in self.player.game.players.keys():
+                    raise Exception("There is no player with this name.")
+                if(targetName): self.targetPlayer = self.player.game.players[targetName.lower()]
+                if result != None and result.lower() in {'none','failed'}: 
+                    raise Exception("Use the None object instead of a string to report no action result.")
+                if result == None: self.result = None
+                else: self.result = result.lower()
                 self.player.game.dailyActions[-1].append(self)
     
     class character:
-        def __init__(self, name):
-            self.name = name
+        def __init__(self, parent, name):
+            self.game = parent
+            if name.lower() not in self.game.scriptCharacters:
+                raise Exception('Character is not in the selected script.')
+            self.name = name.lower()
             self.type = self.get_type()
             self.alignment = self.get_alignment()
 
@@ -220,8 +277,6 @@ class game:
                 elif charName in {'drunk'}: drunks[charName] = self.finalCharactersDict[charName]
                 else: others[charName] = self.finalCharactersDict[charName]
 
-
-
             s = 'IMP: '
             if 'imp' in demons.keys(): s += demons['imp']
             if demons['imp'] in self.transformationsDict.keys(): 
@@ -301,6 +356,7 @@ class game:
         self.circle.append(self.player(self, name, claimedCharacterName))
         self.circle[-1].seat = len(self.circle) - 1
         self.players[name] = self.circle[-1]
+        return self.players[name]
     
     def add_players(self, names):
         for name in names:
@@ -316,7 +372,7 @@ class game:
 
     def findPlayerByUpdatedCharacter(self, characterName):
         for player in self.circle:
-            if player.updatedCharacter == self.character(characterName): return player
+            if player.updatedCharacter == self.character(self, characterName): return player
         return None
 
     def everyPermutationWithNItems(self, n, itemCount): # used to select wrong characters
@@ -385,8 +441,8 @@ class game:
                     
                     self.replacedMinionNames.append(replacedMinionName)
                     self.characterNames.remove(replacedMinionName)
-                    self.findPlayerByUpdatedCharacter(replacedMinionName).updatedCharacter = self.character('imp')
-                    player.updatedCharacter = self.character('dead_imp')
+                    self.findPlayerByUpdatedCharacter(replacedMinionName).updatedCharacter = self.character(self, 'imp')
+                    player.updatedCharacter = self.character(self, 'dead_imp')
                     r = None
                     for m in range(len(self.livingMinions)):
                         if self.livingMinions[m].updatedCharacter.type == 'demon': r = m
@@ -397,8 +453,8 @@ class game:
                     replacedMinion = self.livingMinions.pop()
                     self.replacedMinionNames.append(replacedMinion.updatedCharacter.name)
                     self.characterNames.remove(replacedMinion.updatedCharacter.name)
-                    replacedMinion.updatedCharacter = self.character('imp')
-                    player.updatedCharacter = self.character('dead_imp')
+                    replacedMinion.updatedCharacter = self.character(self, 'imp')
+                    player.updatedCharacter = self.character(self, 'dead_imp')
 
                     # enqueue each alternative choice
                     
@@ -429,8 +485,8 @@ class game:
                     if s == None: raise Exception("Can't find scarlet woman among living minions. ")
                     else: 
                         self.livingMinions.pop(s)
-                    scarletWoman.updatedCharacter = self.character('imp')
-                player.updatedCharacter = self.character('dead_imp')
+                    scarletWoman.updatedCharacter = self.character(self, 'imp')
+                player.updatedCharacter = self.character(self, 'dead_imp')
             elif player.updatedCharacter.type == 'minion':
                 self.characterNames.remove(player.updatedCharacter.name)
                 for m in range(len(self.livingMinions)):
@@ -500,9 +556,6 @@ class game:
 
                             if rightNeighbour.canRegisterAsAlignment('evil'): maxCount += 1
                             if not rightNeighbour.canRegisterAsAlignment('good'): minCount += 1
-
-                            if self.players['jackson'].updatedCharacter.name == 'imp' and self.players['krisey'].updatedCharacter.name == 'poisoner' and self.players['mike'].updatedCharacter.name == 'drunk' and testDay == 3:
-                                print('day3 empath: min/max:' + str(minCount) + '/' + str(maxCount))   
 
                             if info.number < minCount or info.number > maxCount: poisonedNames.add(player.name)
                         case "fortune_teller" | "fortuneteller":
@@ -659,4 +712,4 @@ class game:
             self.solutions.append(sol)
         return solutionWorlds
 
-clocktower = game # back-compat
+clocktower = game # back-compatPlayer
