@@ -26,6 +26,7 @@ g.players["denny"].add_info(1)
 solutions = g.getAllSolutions()
 print("Found ",len(solutions), " solutions:")
 for solution in solutions: print(solution)
+print(g.get_analytics())
 
 ### output ###
 # 

@@ -1,3 +1,5 @@
+import random
+
 class game:
     def __init__(self, script):
         self.circle = [] # ordered list of players by seat
@@ -303,21 +305,33 @@ class game:
             return s     
 
     class analytics:
-        def __init__(self, valid_configurations_count, imp_counts, imp_fractions, gp_valid_configurations_count, gp_imp_counts, gp_imp_fractions):
-            self.valid_configurations_count = valid_configurations_count
-            self.imp_counts = imp_counts
-            self.imp_fractions = imp_fractions
+        def __init__(self, parent):
+            self.game = parent
+            self.valid_configurations_count = self.game.valid_configurations_count
+            self.imp_counts = self.game.imp_counts
+            self.imp_fractions = self.game.imp_fractions
+            self.certain_targets_on_most_certain_targeted = self.game.certain_targets_on_most_certain_targeted
+            self.certain_imp_player_name = self.game.certain_imp_player_name
+            self.most_targeted = self.game.most_targeted
 
             # gp means "great poisoner"
 
-            self.gp_valid_configurations_count = gp_valid_configurations_count
-            self.gp_imp_counts = gp_imp_counts
-            self.gp_imp_fractions = gp_imp_fractions
+            self.gp_valid_configurations_count = self.game.gp_valid_configurations_count
+            self.gp_imp_counts = self.game.gp_imp_counts
+            self.gp_imp_fractions = self.game.gp_imp_fractions
 
 
         def __str__(self):
-            r = str(self.valid_configurations_count) + ' valid configurations:\n' + str(self.imp_fractions) + '\n' 
-            r += str(self.gp_valid_configurations_count) + ' valid configurations without lucky poisoners:\n' + str(self.gp_imp_fractions)
+            r = 'imp probabilities across ' + str(self.valid_configurations_count) + ' valid configurations:\n' + str(self.imp_fractions) + '\n' 
+            r += 'imp probabilities across ' + str(self.gp_valid_configurations_count) + ' valid configurations without lucky poisoners:\n' + str(self.gp_imp_fractions)
+            if self.certain_imp_player_name != None:
+                r += '\n' + self.certain_imp_player_name + ' is the imp! '
+                r += str(self.certain_targets_on_most_certain_targeted) + ' players are sure, which is enough!'
+            else: 
+                r += '\n' + self.most_targeted + ' has the most players pointing to them. The players indicate imp probabilities for ' + self.most_targeted + ' of: ' + str(self.game.consensus_imp_certainties)
+                if len(self.game.certain_accusations.keys()) > 0:
+                    r += '\nThe following players can accuse with certainty (accuser: imp): ' + str(self.game.certain_accusations)
+                else: r += '\nNo players can say they identified the imp with certainty.'
             return r
 
     def get_analytics(self):
@@ -328,20 +342,85 @@ class game:
         # count how many times each player is the updated imp:
         self.imp_counts = {}
         self.gp_imp_counts = {} 
+        self.perspective_imp_counts = [] # count imp possibilities from each player's perspective
+        self.perspective_valid_configurations_counts = [] # list of dicts of names to the number of solutions where they're the imp. Indexed by the seat of the player who considers these solutions
+        self.perspective_imp_fractions = [] # list of dicts of names to the fraction of solutions where they're the imp. Indexed by the seat of the player who considers these solutions
+        self.perspective_imp_player_names = [] # list of names of top imp candidate players, indexed by which player seat thinks they're most likely the imp
+        self.perspective_imp_certainties = [] # how certain each player is that their top imp candidate is the imp
         for player in self.circle: 
             self.imp_counts[player.name] = 0
             self.gp_imp_counts[player.name] = 0
+            self.perspective_imp_counts.append({})
+            self.perspective_valid_configurations_counts.append(0)
+            self.perspective_imp_fractions.append({})
+            for player2 in self.circle:
+                self.perspective_imp_counts[-1][player2.name] = 0
         for solution in self.solutions:
             self.imp_counts[solution.finalCharactersDict['imp']] += 1
+            for player in self.circle:
+                if self.character(self, solution.startingCharacterNamesList[player.seat]).alignment == 'good': # assumes alignment doesn't change in the script
+                    self.perspective_imp_counts[player.seat][solution.finalCharactersDict['imp']] += 1
+                    self.perspective_valid_configurations_counts[player.seat] += 1
             if solution.hasGreatPoisoner() == False: self.gp_imp_counts[solution.finalCharactersDict['imp']] += 1
             else: self.gp_valid_configurations_count -= 1
 
         self.imp_fractions = {}
         self.gp_imp_fractions = {}
+        self.perspective_target_frequencies = {} # dict of player names to how many players think they're the most likely imp 
+        self.perspective_certain_target_frequencies = {} # dict of player names to how many players know for certain they're the imp
         for name in self.imp_counts.keys():
             self.imp_fractions[name] = round(self.imp_counts[name] / self.valid_configurations_count, 3)
-            self.gp_imp_fractions[name] = round(self.gp_imp_counts[name] / self.gp_valid_configurations_count, 3)
-        return self.analytics(self.valid_configurations_count, self.imp_counts, self.imp_fractions, self.gp_valid_configurations_count, self.gp_imp_counts, self.gp_imp_fractions)
+            if self.gp_valid_configurations_count > 0:
+                self.gp_imp_fractions[name] = round(self.gp_imp_counts[name] / self.gp_valid_configurations_count, 3)
+            self.perspective_target_frequencies[name] = 0
+            self.perspective_certain_target_frequencies[name] = 0
+            for player in self.circle:
+                if self.perspective_valid_configurations_counts[player.seat] > 0:
+                    self.perspective_imp_fractions[player.seat][name] = round(self.perspective_imp_counts[player.seat][name] / self.perspective_valid_configurations_counts[player.seat], 3)
+                else: self.perspective_imp_fractions[player.seat][name] = 0
+
+        for player in self.circle: # find each player's top-predicted imp and certainty
+            top_certainty = 0
+            top_candidate = None
+            for candidate in self.circle:
+                fraction = self.perspective_imp_fractions[player.seat][candidate.name]
+                if fraction >= top_certainty: 
+                    top_certainty = fraction
+                    top_candidate = candidate
+            self.perspective_imp_certainties.append(top_certainty)
+            self.perspective_imp_player_names.append(top_candidate.name)
+        
+        # do more players agree with certainty about the imp's identity than there are evil players? If so, that player must be the imp.
+        self.consensus_imp_player_name = None
+        self.certain_imp_player_name = None
+        self.most_targeted = None
+        self.targets_on_most_targeted = 0
+        self.most_certain_targeted = None
+        self.certain_targets_on_most_certain_targeted = 0
+        self.certain_accusations = {}
+        for p in range(len(self.circle)):
+            self.perspective_target_frequencies[self.perspective_imp_player_names[p]] += 1
+            if self.perspective_target_frequencies[self.perspective_imp_player_names[p]] >= self.targets_on_most_targeted:
+                self.most_targeted = self.perspective_imp_player_names[p]
+                self.targets_on_most_targeted = self.perspective_target_frequencies[self.perspective_imp_player_names[p]]
+            if self.perspective_imp_certainties[p] == 1: # player should be saying they're sure
+                self.certain_accusations[self.circle[p].name] = self.perspective_imp_player_names[p]
+                self.perspective_certain_target_frequencies[self.perspective_imp_player_names[p]] += 1
+                if self.perspective_certain_target_frequencies[self.perspective_imp_player_names[p]] >= self.certain_targets_on_most_certain_targeted:
+                    self.most_certain_targeted = self.perspective_imp_player_names[p]
+                    self.certain_targets_on_most_certain_targeted = self.perspective_certain_target_frequencies[self.perspective_imp_player_names[p]]
+        
+        if self.certain_targets_on_most_certain_targeted > self.characterCounts[len(self.circle)][2] + self.characterCounts[len(self.circle)][3]:
+            # then most_certain_targeted must be the imp because there's at least one good player who's sure
+            self.certain_imp_player_name = self.most_certain_targeted
+        else:
+            # create a list of each player's certainties that consensus_imp is the imp, then sort
+            self.consensus_imp_certainties = []
+            for player in self.circle:
+                self.consensus_imp_certainties.append(self.perspective_imp_fractions[player.seat][self.most_targeted])
+            self.consensus_imp_certainties.sort(reverse=True)
+
+        return self.analytics(self)
 
     def createWorld(self): # useful for debugging
         startingCharNames = []
@@ -361,6 +440,17 @@ class game:
     def add_players(self, names):
         for name in names:
             self.add_player(name)
+
+    def set_random_players(self, playerCount): # for constructing new games
+        if (type(playerCount) is not int) or playerCount < 5 or playerCount > 15:
+            raise Exception("Choose a player count between 5 and 15.")
+        
+        # assign seats
+        for i in range(playerCount):
+            self.add_player(str(i))
+
+        # choose an imp
+
 
     def next_day(self):
         self.day += 1
