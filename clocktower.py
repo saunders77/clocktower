@@ -13,6 +13,7 @@ class game:
 
         # for solving: 
         self.queuedWorlds = []
+        self.executedPlayers = [] # indexed by the day when the execution happened
         self.demonKilledPlayers = [None] # indexed by the day after kill
         self.poisonsBlockingInfo = []
 
@@ -134,6 +135,7 @@ class game:
             if character == self.updatedCharacter: return True
             if self.updatedCharacter.name == 'recluse' and character.alignment == 'evil': return True
             if self.updatedCharacter.name == 'spy' and character.alignment == 'good': return True
+            if self.updatedCharacter.name == 'dead_imp' and character.name == 'imp': return True
             return False
 
         def canRegisterAsType(self, charType):
@@ -308,14 +310,16 @@ class game:
 
         def __str__(self):
             r = 'imp probabilities across ' + str(self.valid_configurations_count) + ' valid configurations:\n' + str(self.imp_fractions) + '\n' 
-            r += 'imp probabilities across ' + str(self.gp_valid_configurations_count) + ' valid configurations without lucky poisoners:\n' + str(self.gp_imp_fractions)
+            r += 'imp probabilities across ' + str(self.gp_valid_configurations_count) + ' valid configurations without lucky 1st-night poisoners:\n' + str(self.gp_imp_fractions)
             if self.certain_imp_player_name != None:
                 r += '\n' + self.certain_imp_player_name + ' is the imp! '
                 r += str(self.certain_targets_on_most_certain_targeted) + ' players are sure, which is enough!'
             else: 
-                r += '\n' + self.most_targeted + ' has the most players pointing to them. The players indicate imp probabilities for ' + self.most_targeted + ' of: ' + str(self.game.consensus_imp_certainties)
+                # r += '\n' + self.most_targeted + ' has the most players pointing to them. The players indicate imp probabilities for ' + self.most_targeted + ' of: ' + str(self.game.consensus_imp_certainties)
                 if len(self.game.certain_accusations.keys()) > 0:
-                    r += '\nThe following players can accuse with certainty (accuser: imp): ' + str(self.game.certain_accusations)
+                    r += '\nThe following players can accuse with certainty: '
+                    for accuser in self.game.certain_accusations.keys():
+                        r += accuser + ' accuses ' + self.game.certain_accusations[accuser] + '. '
                 else: r += '\nNo players can say they identified the imp with certainty.'
             return r
 
@@ -462,14 +466,19 @@ class game:
         while len(self.townsfolkNames) - len(availableTownsfolk) < modifiedTownsfolkCount:
             chars.append(availableTownsfolk.pop(random.randint(0, len(availableTownsfolk) - 1)))
         
+        redHerringIndex = random.randint(self.characterCounts[playerCount][2] + 1, playerCount - 1)
+        # assumes fortune teller red herring can't start as the spy and can't move
+
         random.shuffle(chars)
 
         for c in range(playerCount): 
             self.circle[c].set_character(chars[c])
-            if self.circle[c].alignment == 'good': self.circle[c].claim(chars[c])
-            else: # evil player picks a random good character
+            if c == redHerringIndex: self.circle[c].isFortuneTellerRedHerring = True
+            if self.circle[c].updatedCharacter.name == 'drunk': self.circle[c].claim(availableTownsfolk.pop(random.randint(0, len(availableTownsfolk)-1)))
+            elif self.circle[c].alignment == 'good': self.circle[c].claim(chars[c])
+            else: # evil player picks a random good character. might be in play
                 goodNames = self.townsfolkNames + self.outsiderNames
-                self.circle[c].claim(goodNames[random.randint(0,len(goodNames)-1)])        
+                self.circle[c].claim(goodNames[random.randint(0,len(goodNames)-1)])      
 
     def findPlayerByUpdatedCharacter(self, characterName):
         for player in self.circle:
@@ -497,6 +506,7 @@ class game:
         return (minPairs, maxPairs)
     
     def empathRange(self, player):
+        playerCount = len(self.circle)
         minCount = 0
         maxCount = 0
 
@@ -516,92 +526,166 @@ class game:
         
         return (minCount, maxCount)
 
-    def set_random_info_day(self) # for constructing games
+    def run_random_night_and_day(self): # for constructing games
         playerCount = len(self.circle)
+        poisonedPlayer = None
+        monkedPlayer = None
+        monkablePlayers = []
+        livingMinions = []
+        livingPlayers = []
+        goodLivingPlayers = []
+        charPlayers = {} # dict of character name to player object
         for player in self.circle:
-            match player.claimedCharacter.name:
-                case 'washerwoman':
-                    if player.updatedCharacter.alignment == 'evil':
-                        picks = self.pickNRandomPlayerNames(2, [player.name])
-                        player.add_info(1,self.townsfolkNames[random.randint(0,len(self.townsfolkNames)-1)],picks[0],picks[1])
-                    else:
-                        registeredName = None
-                        registeredTownsfolk = None
-                        while registeredName == None:
-                            picks = self.pickNRandomPlayerNames(1, [player.name])
-                            if self.players[picks[0]].canRegisterAsType('townsfolk'): 
-                                registeredName = picks[0]
-                        otherName = self.pickNRandomPlayerNames(1,[player.name, registeredName])
-                        if self.players[registeredName].updatedCharacter.name == 'spy':
-                            registeredTownsfolk = self.townsfolkNames[random.randint(0,len(self.townsfolkNames)-1)]
-                        else: registeredTownsfolk = self.players[registeredName].updatedCharacter.name
-                        player.add_info(1,registeredTownsfolk,registeredName,otherName)
-                case 'librarian':
-                    if player.updatedCharacter.alignment == 'evil':
-                        if (self.characterCounts[playerCount][1] == 0 and random.randint(1,8) <= 5) or (self.characterCounts[playerCount)][1] == 1 and random.randint(1,8) == 8):
-                            player.add_info(0)
-                        else:
+            if player.alive and player.updatedCharacter.name != 'monk': monkablePlayers.append(player)
+            if player.alive and player.updatedCharacter.alignment == 'good': goodLivingPlayers.append(player)
+            if player.updatedCharacter.type == 'minion' and player.alive: livingMinions.append(player)
+            charPlayers[player.updatedCharacter.name] = player
+
+        if 'monk' in charPlayers.keys(): livingPlayers = monkablePlayers + [charPlayers['monk']]
+        
+        # poisoner
+        if 'poisoner' in charPlayers.keys() and charPlayers['poisoner'].alive: 
+            poisonedPlayer = (goodLivingPlayers + [charPlayers['poisoner'], charPlayers['imp']])[random.randint(0,len(livingPlayers)+1)] # allow the poisoner to poison itself to appear non-poisoning. Allow to poison imp to simulate soldier/monk
+        # monk
+        if self.day > 0 and charPlayers['monk'] != None and charPlayers['monk'].alive and poisonedPlayer != charPlayers['monk']: 
+            monkedPlayer = monkablePlayers[random.randint(0,len(monkablePlayers)-1)]
+        # imp
+        def killPlayerAtNight(p):
+            p.alive = False
+            p.was_killed_at_night()
+            liveIndex = None
+            for live in livingPlayers:
+                if live == p: liveIndex = live
+            livingPlayers.pop(liveIndex)    
+
+        if self.day > 0 and poisonedPlayer != charPlayers['imp']:
+            if len(livingMinions) > 0: nightDeathPlayer = livingPlayers[random.randint(0,len(livingPlayers)-1)] # allow the imp to kill a minion or itself
+            else: nightDeathPlayer = goodLivingPlayers[random.randint(0,len(goodLivingPlayers)-1)]
+            if nightDeathPlayer == charPlayers['mayor']: nightDeathPlayer = livingPlayers[random.randint(0,len(livingPlayers)-1)] # warning: can end the game if kills imp
+
+            if nightDeathPlayer != monkedPlayer and nightDeathPlayer != charPlayers['soldier']: # then proceed with the kill        
+                if nightDeathPlayer == charPlayers['imp'] and len(livingMinions) > 0: 
+                    replacement = livingMinions[random.randint(0,len(livingMinions)-1)]
+                    if charPlayers['scarletWoman'] != None and charPlayers['scarletWoman'].alive and len(livingPlayers) >= 5:
+                        replacement = charPlayers['scarletWoman']
+                    replacement.updatedCharacter = self.character(self, 'imp')
+                    charPlayers['imp'].updatedCharacter = self.character(self, 'dead_imp')
+                    mIndex = None
+                    for m in livingMinions: 
+                        if m == replacement: mIndex = m
+                    livingMinions.pop(mIndex)
+                killPlayerAtNight(nightDeathPlayer)
+
+        # info roles and fakers
+        for player in self.circle:
+            if player.alive:
+                possiblyWrongInfo = player.updatedCharacter.alignment == 'evil' or player == poisonedPlayer or player == charPlayers['drunk']
+                match player.claimedCharacter.name:
+                    case 'washerwoman':
+                        if possiblyWrongInfo:
                             picks = self.pickNRandomPlayerNames(2, [player.name])
-                            player.add_info(1,self.outsiderNames[random.randint(0,len(self.outsiderNames)-1)],picks[0],picks[1])
-                    else:
-                        minOutsidersRegistered = self.characterCounts[playerCount][1]
-                        maxOutsidersRegistered = self.characterCounts[playerCount][1]
-                        if self.findPlayerByUpdatedCharacter('recluse') != None: minOutsidersRegistered -= 1
-                        if self.findPlayerByUpdatedCharacter('spy') != None: maxOutsidersRegistered += 1
-                        if maxOutsidersRegistered == 0: player.add_info(0)
-                        elif minOutsidersRegistered == 0 and random.randint(0,maxOutsidersRegistered) == 0: player.add_info(0)
+                            player.add_info(1,self.townsfolkNames[random.randint(0,len(self.townsfolkNames)-1)],picks[0],picks[1])
                         else:
                             registeredName = None
-                            registeredOutsider = None
+                            registeredTownsfolk = None
                             while registeredName == None:
                                 picks = self.pickNRandomPlayerNames(1, [player.name])
-                                if self.players[picks[0]].canRegisterAsType('outsider'): 
+                                if self.players[picks[0]].canRegisterAsType('townsfolk'): 
                                     registeredName = picks[0]
                             otherName = self.pickNRandomPlayerNames(1,[player.name, registeredName])
                             if self.players[registeredName].updatedCharacter.name == 'spy':
-                                registeredOutsider = self.outsiderNames[random.randint(0,len(self.outsiderNames)-1)]
-                            else: registeredOutsider = self.players[registeredName].updatedCharacter.name
-                            player.add_info(1,registeredOutsider, registeredName, otherName)
-                case 'investigator':
-                    if player.updatedCharacter.alignment == 'evil':
-                        picks = self.pickNRandomPlayerNames(2, [player.name])
-                        player.add_info(1,self.minionNames[random.randint(0,len(self.minionNames)-1)],picks[0],picks[1])
-                    else:
-                        registeredName = None
-                        registeredMinion = None
-                        while registeredName == None:
-                            picks = self.pickNRandomPlayerNames(1, [player.name])
-                            if self.players[picks[0]].canRegisterAsType('minion'): 
-                                registeredName = picks[0]
-                        otherName = self.pickNRandomPlayerNames(1,[player.name, registeredName])
-                        if self.players[registeredName].updatedCharacter.name == 'recluse':
-                            registeredMinion = self.minionNames[random.randint(0,len(self.minionNames)-1)]
-                        else: registeredMinion = self.players[registeredName].updatedCharacter.name
-                        player.add_info(1,registeredMinion,registeredName,otherName)
-                case 'chef':
-                    if player.updatedCharacter.alignment == 'evil':
-                        evilPairMax = self.scriptCharacters[playerCount][2] # assumes trouble brewing
-                        if self.findPlayerByUpdatedCharacter('recluse') != None: evilPairMax += 1
-                        player.add_info(int(round((random.randint(0,int(round(math.sqrt(evilPairMax) * 4))) ** 2) / 16))) # maxes lower numbers of pairs a bit likelier
-                    else:
-                        (minPairs, maxPairs) = self.chefRange(player)
-                        player.add_info(random.randint(minPairs,maxPairs))
-                case 'empath':
-                    if player.updatedCharacter.alignment == 'evil': player.add_info(random.randint(0,2))
-                    else:
-                        (minCount, maxCount) = self.empathRange(player)
-                        player.add_info(random.randint(minCount,maxCount))
-                case 'fortune_teller':
-                    if player.updatedCharacter.alignment == 'evil':
+                                registeredTownsfolk = self.townsfolkNames[random.randint(0,len(self.townsfolkNames)-1)]
+                            else: registeredTownsfolk = self.players[registeredName].updatedCharacter.name
+                            player.add_info(1,registeredTownsfolk,registeredName,otherName)
+                    case 'librarian':
+                        if possiblyWrongInfo:
+                            if (self.characterCounts[playerCount][1] == 0 and random.randint(1,8) <= 5) or (self.characterCounts[playerCount][1] == 1 and random.randint(1,8) == 8):
+                                player.add_info(0)
+                            else:
+                                picks = self.pickNRandomPlayerNames(2, [player.name])
+                                player.add_info(1,self.outsiderNames[random.randint(0,len(self.outsiderNames)-1)],picks[0],picks[1])
+                        else:
+                            minOutsidersRegistered = self.characterCounts[playerCount][1]
+                            maxOutsidersRegistered = self.characterCounts[playerCount][1]
+                            if self.findPlayerByUpdatedCharacter('recluse') != None: minOutsidersRegistered -= 1
+                            if self.findPlayerByUpdatedCharacter('spy') != None: maxOutsidersRegistered += 1
+                            if maxOutsidersRegistered == 0: player.add_info(0)
+                            elif minOutsidersRegistered == 0 and random.randint(0,maxOutsidersRegistered) == 0: player.add_info(0)
+                            else:
+                                registeredName = None
+                                registeredOutsider = None
+                                while registeredName == None:
+                                    picks = self.pickNRandomPlayerNames(1, [player.name])
+                                    if self.players[picks[0]].canRegisterAsType('outsider'): 
+                                        registeredName = picks[0]
+                                otherName = self.pickNRandomPlayerNames(1,[player.name, registeredName])
+                                if self.players[registeredName].updatedCharacter.name == 'spy':
+                                    registeredOutsider = self.outsiderNames[random.randint(0,len(self.outsiderNames)-1)]
+                                else: registeredOutsider = self.players[registeredName].updatedCharacter.name
+                                player.add_info(1,registeredOutsider, registeredName, otherName)
+                    case 'investigator':
+                        if possiblyWrongInfo:
+                            picks = self.pickNRandomPlayerNames(2, [player.name])
+                            player.add_info(1,self.minionNames[random.randint(0,len(self.minionNames)-1)],picks[0],picks[1])
+                        else:
+                            registeredName = None
+                            registeredMinion = None
+                            while registeredName == None:
+                                picks = self.pickNRandomPlayerNames(1, [player.name])
+                                if self.players[picks[0]].canRegisterAsType('minion'): 
+                                    registeredName = picks[0]
+                            otherName = self.pickNRandomPlayerNames(1,[player.name, registeredName])
+                            if self.players[registeredName].updatedCharacter.name == 'recluse':
+                                registeredMinion = self.minionNames[random.randint(0,len(self.minionNames)-1)]
+                            else: registeredMinion = self.players[registeredName].updatedCharacter.name
+                            player.add_info(1,registeredMinion,registeredName,otherName)
+                    case 'chef':
+                        if possiblyWrongInfo:
+                            evilPairMax = self.scriptCharacters[playerCount][2] # assumes trouble brewing
+                            if self.findPlayerByUpdatedCharacter('recluse') != None: evilPairMax += 1
+                            player.add_info(int(round((random.randint(0,int(round(math.sqrt(evilPairMax) * 4))) ** 2) / 16))) # maxes lower numbers of pairs a bit likelier
+                        else:
+                            (minPairs, maxPairs) = self.chefRange(player)
+                            player.add_info(random.randint(minPairs,maxPairs))
+                    case 'empath':
+                        if possiblyWrongInfo: player.add_info(random.randint(0,2))
+                        else:
+                            (minCount, maxCount) = self.empathRange(player)
+                            player.add_info(random.randint(minCount,maxCount))
+                    case 'fortune_teller':
                         picks = self.pickNRandomPlayerNames(2, [])
-                        player.add_info(random.randint(0,1),'imp',picks[0],picks[1])
-                    else:
-                        
+                        if possiblyWrongInfo:
+                            player.add_info(random.randint(0,1),'imp',picks[0],picks[1])
+                        else:
+                            if self.players[picks[0]].mustRegisterAsType('demon') or self.players[picks[1]].mustRegisterAsType('demon') or self.players[picks[0]].isFortuneTellerRedHerring or self.players[picks[1]].isFortuneTellerRedHerring:
+                                player.add_info(1,'imp',picks[0],picks[1])
+                            elif self.players[picks[0]].canRegisterAsType('demon') or self.players[picks[1]].canRegisterAsType('demon'):
+                                player.add_info(random.randint(0,1),'imp',picks[0],picks[1])
+                            else:
+                                player.add_info(0,'imp',picks[0],picks[1])
+                    case 'undertaker':
+                        if self.day > 0 and self.executedPlayers[self.day-1] != None: # someone was executed
+                            normalUndertake = False
+                            if possiblyWrongInfo:
+                                allowedNames = self.townsfolkNames + self.minionNames + self.outsiderNames + ['imp']
+                            elif self.executedPlayers[self.day-1].updatedCharacter.name == 'recluse':
+                                allowedNames = self.minionNames + ['imp','recluse']
+                            elif self.executedPlayers[self.day-1].updatedCharacter.name == 'spy':
+                                allowedNames = self.townsfolkNames + self.outsiderNames + ['spy']
+                            else: normalUndertake = True
 
+                            if normalUndertake and self.executedPlayers[self.day-1].updatedCharacter.name == 'dead_imp':
+                                player.add_info(1,'imp',self.executedPlayers[self.day-1].name)
+                            elif normalUndertake:
+                                player.add_info(1,self.executedPlayers[self.day-1].updatedCharacter.name, self.executedPlayers[self.day-1].name)
+                            else: # abnormal undertake
+                                player.add_info(1, allowedNames[random.randint(0, len(allowedNames)-1)], self.executedPlayers[self.day-1].name) # unlikely to work out as a lie, but possible
+                    
     def next_day(self):
         self.day += 1
         self.dailyActions.append([])
         if len(self.demonKilledPlayers) < self.day: self.demonKilledPlayers.append(None)
+        if len(self.executedPlayers) < self.day: self.executedPlayers.append(None)
         for player in self.circle:
             player.actions.append([])
             player.claimedInfos.append(None)
@@ -660,13 +744,27 @@ class game:
         if 'baron' in self.characterNames: expectedOutsiders = expectedOutsiders + 2
         if expectedOutsiders != outsiderCount: return False
 
+        def scarletBecomesImp(scarletPlayer):
+            self.characterNames.remove('scarlet_woman')
+            s = None
+            for m in range(len(self.livingMinions)):
+                if self.livingMinions[m] == scarletPlayer: s = m
+            if s == None: raise Exception("Can't find scarlet woman among living minions. ")
+            else: 
+                self.livingMinions.pop(s)
+            scarletPlayer.updatedCharacter = self.character(self, 'imp')
+
         def killedPlayer(player, nightDeath, queuedReplacementMinionNames):
             self.countLivingPlayers -= 1
             player.alive = False
             if nightDeath and player.updatedCharacter.name == 'imp':
                 if len(self.livingMinions) < 1: return False # the imp can't kill itself if no minions remain
-                # check if there's a queue
-                if len(queuedReplacementMinionNames) > 0:
+                
+                scarletWoman = self.findPlayerByUpdatedCharacter('scarlet_woman')
+                if scarletWoman != None and scarletWoman.alive and self.countLivingPlayers >= 4: # then we need to use the scarlet woman
+                    scarletBecomesImp(scarletWoman)
+                    player.updatedCharacter = self.character(self, 'dead_imp')
+                elif len(queuedReplacementMinionNames) > 0: # check if there's a queue
                     # just use the first minion in the queue
                     replacedMinionName = queuedReplacementMinionNames.pop(0)
                     
@@ -709,23 +807,19 @@ class game:
                 scarletWoman = self.findPlayerByUpdatedCharacter('scarlet_woman')
                 if self.countLivingPlayers < 4 or scarletWoman == None or scarletWoman.alive == False: return False  # after imp killed during the day, scarlet woman needs 4+ players to still live
                 else:
-                    self.characterNames.remove('scarlet_woman')
-                    s = None
-                    for m in range(len(self.livingMinions)):
-                        if self.livingMinions[m] == scarletWoman: s = m
-                    if s == None: raise Exception("Can't find scarlet woman among living minions. ")
-                    else: 
-                        self.livingMinions.pop(s)
-                    scarletWoman.updatedCharacter = self.character(self, 'imp')
+                    scarletBecomesImp(scarletWoman)
                 player.updatedCharacter = self.character(self, 'dead_imp')
+                self.executedPlayers.append(player)
             elif player.updatedCharacter.type == 'minion':
                 self.characterNames.remove(player.updatedCharacter.name)
+                mIndex = None
                 for m in range(len(self.livingMinions)):
-                    if self.livingMinions[m] == player: 
-                        self.livingMinions.pop(m)
-                        return True # can only do this if no checks follow in this function
+                    if self.livingMinions[m] == player: mIndex = m
+                self.livingMinions.pop(mIndex)
+                self.executedPlayers.append(player)
             else:
                 self.characterNames.remove(player.updatedCharacter.name)
+                self.executedPlayers.append(player)
             return True
 
         for testDay in range(self.day + 1):
@@ -787,8 +881,8 @@ class game:
                                 maxCount = 1 
                             if info.number < minCount or info.number > maxCount: poisonedNames.add(player.name)
                         case "undertaker":
-                            if len(self.executedPlayers) == 0: return False # undertaker shouldn't be woken without execution
-                            elif not self.executedPlayers[-1].canRegisterAsChar(info.character):
+                            if testDay > 0 and self.executedPlayers[testDay-1] == None: return False # undertaker shouldn't be woken without execution
+                            elif testDay > 0 and (not self.executedPlayers[testDay-1].canRegisterAsChar(info.character)):
                                 poisonedNames.add(player.name)
                         case "monk": # considered "info" instead of an action because it's secretly chosen
                             if deadPlayerToday == info.player1:
@@ -905,6 +999,7 @@ class game:
                         self.circle[wrongCharPerm[i]].set_character(wrongCharList[i])
                     recordIfConsistent()
                 countCheckedConfigs += 1
+                if countCheckedConfigs % 10000 == 0: print('... Checking configurations with ' + str(drunksCount) + ' drunks. Checked ' + str(countCheckedConfigs) + ' so far...')
 
         # check other queued worlds:
         while len(self.queuedWorlds) > 0:
@@ -915,7 +1010,7 @@ class game:
                 if player.seat == world.fortuneTellerRedHerringSeat: player.isFortuneTellerRedHerring = True
             recordIfConsistent(world.replacementMinionNamesQueue)
 
-        print("Checked ", countCheckedConfigs, " configurations with ", drunksCount, "drunks.")
+        print("... Checked ", countCheckedConfigs, " configurations with ", drunksCount, "drunks.")
         for sol in solutionWorlds:
             self.solutions.append(sol)
         return solutionWorlds
