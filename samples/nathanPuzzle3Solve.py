@@ -26,6 +26,7 @@ solutions = g.getAllSolutions()
 print("Found ",len(solutions), " solutions:")
 for solution in solutions: print(solution)
 print(g.get_analytics())
+g.print_game_summary()
 
 ### output ###
 #
