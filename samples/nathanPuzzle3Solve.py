@@ -22,11 +22,12 @@ g.players["denny"].slay('chris', 'trigger')
 g.players["denny"].nominate('finn', None)
 g.players["gisele"].add_info(1, 'poisoner', 'beth', 'finn')
 
+g.print_game_summary()
 solutions = g.getAllSolutions()
 print("Found ",len(solutions), " solutions:")
 for solution in solutions: print(solution)
 print(g.get_analytics())
-g.print_game_summary()
+
 
 ### output ###
 #
