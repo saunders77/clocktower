@@ -106,6 +106,23 @@ str(world) yields a user-readable solution (same for print(world))
 
 Call after game.getAllSolutions(). Returns an analytics object. Call print() or str() with it to see a summary of solutions data
 
+## Generating Puzzles:
+
+You can use game.set_random_players_and_claims() and then game.run_random_night_and_day() as many times as you wish to simulate a random game. game.active identifies whether the simulation is still going. The simulation ends when the game ends or when 3 final players are reached and the players must make a decision. game.winner identifies the winning team.
+
+### game.set_random_players_and_claims(player_count, evil_strategy=None, min_info_roles=0, you_exist=False)
+
+Set evil_stategy = 'basic' for basic strategy such as picking an imp bluff instead of a random bluff.
+
+Set min_info_roles to a higher number (eg. 2) if you want the storyteller to choose at least that many roles who get either 1st-night info or regular info throughout the game.
+
+Set you_exist = True if you want one of the players to be "you", in other words, to know that player is being honest about the info they receive.
+
+### game.run_random_night_and_day(evil_strategy=None, max_days=None)
+
+Set evil_stategy = 'basic' for basic strategy such as picking an imp bluff instead of a random bluff.
+Set max_days = 1 to stop after 1 day (single-day puzzle) instead of continuing through to the final 3
+
 ## Samples: 
 
 See clocktower/samples for usage examples with 3 puzzles  

@@ -813,7 +813,7 @@ class game:
                         player.slay(target.name, result)
         
         # random player executed
-        if noOneExecutedTodayYet and self.day < maxDays - 1 and random.randint(0,len(livingPlayers)) == 0: # allow for a chance of non-execution
+        if noOneExecutedTodayYet and self.day < maxDays - 1 and len(livingPlayers) != 4 and random.randint(0,len(livingPlayers)) == 0: # allow for a chance of non-execution
             executee = livingPlayers[random.randint(0,len(livingPlayers)-1)]
             executee.executed_by_vote()
             if executee.updatedCharacter.name == 'saint' and executee.poisoned == False: 
