@@ -6,10 +6,12 @@ foundUniqueSolution = False
 
 while foundUniqueSolution == False:
     g = clocktower.game("trouble_brewing")
-    g.set_random_players_and_claims(8, 'basic', 2) # for 8 players
+    g.set_random_players_and_claims(8, 'basic', 2, False) # for 8 players
+    # params: player_count, evil_strategy, min_info_roles, includes_you 
     gameActive = True
     while g.active:
         g.run_random_night_and_day('basic',1)
+        # params: evil_strategy, max_days
         if g.active: g.next_day()
     if g.winner == None: 
         solutions = g.getAllSolutions(False, 0, True)
@@ -19,22 +21,22 @@ while foundUniqueSolution == False:
                 foundUniqueSolution = True
                 g.print_game_summary()
 
-#Sample output:
+ #Sample output:
 
-#***GAME SUMMARY:***
-#player0 (claims slayer)
-#player1 (claims undertaker)
-#player2 (claims virgin)
-#player3 (claims fortune_teller)
-#player4 (claims chef)
-#player5 (claims investigator)
-#player6 (claims recluse)
-#player7 (claims saint)
+# ***GAME SUMMARY:***
+# abed (claims slayer)
+# beth (claims undertaker)
+# chris (claims virgin)
+# denny (claims fortune_teller)
+# egan (claims chef)
+# finn (claims investigator)
+# gisele (claims recluse)
+# haoyu (claims saint)
 #
-#NIGHT 0:
-#player3 (claiming fortune_teller) saw that neither player7 nor player6 is the imp.
-#player4 (claiming chef) saw 0 pairs of evil players.
-#player5 (claiming investigator) saw that player7 or player1 is the poisoner.
-#DAY 0:
-#player0 shot player7 and nothing happened.
-#player6 nominated player2 and player6 was executed.
+# NIGHT 0:
+# denny (claiming fortune_teller) saw that neither haoyu nor gisele is the imp.
+# egan (claiming chef) saw 0 pairs of evil players.
+# finn (claiming investigator) saw that haoyu or beth is the poisoner.
+# DAY 0:
+# abed shot haoyu and nothing happened.
+# gisele nominated beth and gisele was executed.

@@ -451,13 +451,17 @@ class game:
         for name in names:
             self.add_player(name)
 
-    def set_random_players_and_claims(self, playerCount, evilStrategy=None, stRolesMinInfo=0): # for constructing new games
+    def set_random_players_and_claims(self, playerCount, evilStrategy=None, stRolesMinInfo=0, youExist=False): # for constructing new games
+        names = ['you','abed','beth','chris','denny','egan','finn','gisele','haoyu','igor','julie','kaito','layla','mwangi','neha','omar']
+        if youExist: namesIndex = 0
+        else: namesIndex = 1
+
         if (type(playerCount) is not int) or playerCount < 5 or playerCount > 15:
             raise Exception("Choose a player count between 5 and 15.")
         
         # assign seats
         for i in range(playerCount):
-            self.add_player('player'+str(i))
+            self.add_player(names[i + namesIndex])
 
         chars = [] # index is seat
 
