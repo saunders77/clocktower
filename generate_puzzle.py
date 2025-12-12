@@ -5,21 +5,32 @@ import clocktower
 foundUniqueSolution = False
 
 while foundUniqueSolution == False:
-    g = clocktower.game("trouble_brewing")
-    g.set_random_players_and_claims(8, 'basic', 2, False) # for 8 players
-    # params: player_count, evil_strategy, min_info_roles, includes_you 
-    gameActive = True
-    while g.active:
-        g.run_random_night_and_day('basic',1)
-        # params: evil_strategy, max_days
-        if g.active: g.next_day()
+    
+    goodCombo = False
+    g = None
+    while goodCombo == False:
+        g1 = clocktower.game("trouble_brewing")
+        g1.set_random_players_and_claims(8, 'basic', 2, True) # for 8 players
+        # params: player_count, evil_strategy, min_info_roles, includes_you 
+        charNames = []
+        for p in g1.circle: charNames.append(p.updatedCharacter.name)
+        if 'drunk' in charNames and 'scarlet_woman' not in charNames: 
+            goodCombo = True
+            g = g1
+    g.run_random_night_and_day('basic',1)
+    # params: evil_strategy, max_days
+    # so far, only single-day generations have been tested :)
+
     if g.winner == None: 
-        solutions = g.getAllSolutions(False, 0, True)
+        solutions = g.getAllSolutions(False,0, True)
         if len(solutions) > 0:
             a = g.get_analytics()
             if len(a.possible_imps) == 1: # desired number of imp solutions 
                 foundUniqueSolution = True
+                print(charNames)
                 g.print_game_summary()
+                print(solutions[0])
+            else: print("this one had more possible imps: " + str(len(a.possible_imps)))
 
  #Sample output:
 
@@ -39,4 +50,4 @@ while foundUniqueSolution == False:
 # finn (claiming investigator) saw that haoyu or beth is the poisoner.
 # DAY 0:
 # abed shot haoyu and nothing happened.
-# gisele nominated beth and gisele was executed.
+# gisele nominated chris and gisele was executed.

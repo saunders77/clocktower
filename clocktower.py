@@ -519,13 +519,16 @@ class game:
         # assumes fortune teller red herring can't start as the spy and can't move
 
         random.shuffle(chars)
+        while youExist and chars[0] not in self.townsfolkNames + self.outsiderNames: # 'you' must be good
+            random.shuffle(chars)
+        
         availableGood = availableOutsiders + availableTownsfolk + unusedTownsfolk
         drunkIndex = None
         for i in range(len(availableGood)):
             if availableGood[i] == 'drunk': drunkIndex = i
         if drunkIndex != None: availableGood.pop(drunkIndex)
         random.shuffle(availableGood)
-        self.impBluffCharNames = availableGood[0:3] 
+        self.impBluffCharNames = availableGood[0:3]
 
         for c in range(playerCount): 
             self.circle[c].set_character(chars[c])
@@ -600,12 +603,14 @@ class game:
         livingMinions = []
         livingPlayers = []
         goodLivingPlayers = []
+        townsfolkClaimers = []
         charPlayers = {} # dict of character name to player object
         for player in self.circle:
             player.poisoned = False
             if player.alive and player.updatedCharacter.name != 'monk': monkablePlayers.append(player)
             if player.alive and player.updatedCharacter.alignment == 'good': goodLivingPlayers.append(player)
             if player.updatedCharacter.type == 'minion' and player.alive: livingMinions.append(player)
+            if self.day == 0 and player.claimedCharacter.type == 'townsfolk': townsfolkClaimers.append(player)
             charPlayers[player.updatedCharacter.name] = player
 
         if 'monk' in charPlayers.keys(): livingPlayers = monkablePlayers + [charPlayers['monk']]
@@ -640,12 +645,12 @@ class game:
                     for m in range(len(livingMinions)): 
                         if livingMinions[m] == replacement: mIndex = m
                     livingMinions.pop(mIndex)
-                else: # imp executed during the day
+                else: # imp killed during the day
                     if 'scarlet_woman' in charPlayers.keys() and charPlayers['scarlet_woman'].alive and len(livingPlayers) >= 5:
                         replacement = charPlayers.pop('scarlet_woman')
                     else: 
                         self.active = False
-                        winner = 'good'
+                        self.winner = 'good'
             liveIndex = None
             for live in range(len(livingPlayers)):
                 if livingPlayers[live] == p: liveIndex = live
@@ -660,6 +665,11 @@ class game:
                 for g in range(len(goodLivingPlayers)): 
                     if goodLivingPlayers[g] == p: gIndex = g
                 goodLivingPlayers.pop(gIndex)
+            if p in townsfolkClaimers:
+                tIndex = None
+                for t in range(len(townsfolkClaimers)):
+                    if townsfolkClaimers[t] == p: tIndex = t
+                townsfolkClaimers.pop(tIndex)
 
         def getInfoCharNameForPlayer(p, possiblyWrong):
             deterministic = False
@@ -796,20 +806,24 @@ class game:
             match player.claimedCharacter.name:
                 case 'virgin': # be nominated by a random living player
                     if self.day == 0:
-                        nominator = livingPlayers[random.randint(0,len(livingPlayers)-1)]
+                        nominator = townsfolkClaimers[random.randint(0,len(townsfolkClaimers)-1)]
                         result = None
-                        if nominator.canRegisterAsType('townsfolk') and player.updatedCharacter.name == 'virgin' and player.poisoned == False: 
-                            result = 'trigger'
-                            killPlayer(nominator, False)
-                            noOneExecutedTodayYet = False
-                        livingPlayers[random.randint(0,len(livingPlayers)-1)].nominate(player.name, result)
+                        if player.updatedCharacter.name == 'virgin' and player.poisoned == False: 
+                            if nominator.canRegisterAsType('townsfolk'):
+                                if nominator.mustRegisterAsType('townsfolk') or random.randint(0,1) == 1: # spies can register 50%
+                                    result = 'trigger'
+                                    killPlayer(nominator, False)
+                                    noOneExecutedTodayYet = False
+                        nominator.nominate(player.name, result)
                 case 'slayer': # shoot at a random living player
                     if self.day == 0:
                         target = livingPlayers[random.randint(0,len(livingPlayers)-1)]
                         result = None
-                        if target.canRegisterAsType('demon') and player.updatedCharacter.name == 'slayer' and player.poisoned == False:
-                            result = 'trigger'
-                            killPlayer(target, False)
+                        if player.updatedCharacter.name == 'slayer' and player.poisoned == False:
+                            if target.canRegisterAsType('demon'):
+                                if target.mustRegisterAsType('demon') or random.randint(0,1) == 1: # recluses can register 50%
+                                    result = 'trigger'
+                                    killPlayer(target, False)
                         player.slay(target.name, result)
         
         # random player executed
@@ -818,7 +832,7 @@ class game:
             executee.executed_by_vote()
             if executee.updatedCharacter.name == 'saint' and executee.poisoned == False: 
                 self.active = False
-                winner = 'evil'
+                self.winner = 'evil'
             killPlayer(executee, False)
         elif self.day >= maxDays - 1: self.active = False # stop the game early to analyze
         
