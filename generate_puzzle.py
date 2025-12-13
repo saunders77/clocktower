@@ -14,7 +14,7 @@ while foundUniqueSolution == False:
         # params: player_count, evil_strategy, min_info_roles, includes_you 
         charNames = []
         for p in g1.circle: charNames.append(p.updatedCharacter.name)
-        if 'drunk' in charNames and 'scarlet_woman' not in charNames: 
+        if 'scarlet_woman' not in charNames: 
             goodCombo = True
             g = g1
     g.run_random_night_and_day('basic',1)
@@ -31,7 +31,12 @@ while foundUniqueSolution == False:
                 print(charNames)
                 g.print_game_summary()
                 print(solutions[0])
-            else: print('solved ' + str(solvedCt) + ' with more possible imps: ' + str(len(a.possible_imps)))
+            elif a.certain_imp_player_name != None:
+                foundUniqueSolution = True
+                print('SPECIAL SOLUTION! ' + str(charNames))
+                g.print_game_summary()
+                for s in solutions: print(s)
+            elif solvedCt % 100 == 99: print('solved ' + str(solvedCt) + ' with more possible imps: ' + str(len(a.possible_imps)))
 
  #Sample output:
 

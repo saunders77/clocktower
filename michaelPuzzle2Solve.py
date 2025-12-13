@@ -4,21 +4,21 @@ g = clocktower.game("trouble_brewing")
 
 # define players
 
-g.add_player('you', 'investigator')
-g.add_player('abed',     'investigator')
-g.add_player('beth',    'librarian')
-g.add_player('chris',    'fortune_teller')
-g.add_player('denny',   'ravenkeeper')
-g.add_player('egan',   'monk')
+g.add_player('you', 'saint')
+g.add_player('abed',     'fortune_teller')
+g.add_player('beth',    'soldier')
+g.add_player('chris',    'librarian')
+g.add_player('denny',   'virgin')
+g.add_player('egan',   'empath')
 g.add_player('finn',    'recluse')
-g.add_player('gisele',    'saint')
+g.add_player('gisele',    'butler')
 
 # define info and actions
 
-g.players["you"].add_info(1,'scarlet_woman','chris','gisele')
-g.players["abed"].add_info(1,'scarlet_woman','you','finn')
-g.players["beth"].add_info(0)
-g.players["chris"].add_info(0,'imp','beth','abed')
+g.players["abed"].add_info(0,'imp','gisele','beth')
+g.players["chris"].add_info(0)
+g.players["egan"].add_info(1)
+g.players["chris"].nominate('denny','trigger')
 
 g.print_game_summary()
 solutions = g.getAllSolutions()

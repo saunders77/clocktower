@@ -749,12 +749,14 @@ class game:
         livingPlayers = []
         goodLivingPlayers = []
         townsfolkClaimers = []
+        outsiderPlayers = [] # could be dead
         charPlayers = {} # dict of ID to player object
         for player in self.circle:
             player.poisoned = False
             if player.alive and player.updatedCharacterId != self.char_id['monk']: monkablePlayers.append(player)
             if player.alive and self.id_align[player.updatedCharacterId] == 0: goodLivingPlayers.append(player)
             if self.id_type[player.updatedCharacterId] == 2 and player.alive: livingMinions.append(player)
+            elif self.id_type[player.updatedCharacterId] == 1: outsiderPlayers.append(player)
             if self.day == 0 and player.claimedCharacter.type == 'townsfolk': townsfolkClaimers.append(player)
             charPlayers[player.updatedCharacterId] = player
 
@@ -914,15 +916,17 @@ class game:
                             else:
                                 player.add_info(1,self.outsiderNames[random.randint(0,len(self.outsiderNames)-1)],picks[0],picks[1])
                     elif player.alive:
-                        minOutsidersRegistered = self.characterCounts[playerCount][1]
-                        maxOutsidersRegistered = self.characterCounts[playerCount][1]
+                        minOutsidersRegistered = len(outsiderPlayers)
+                        maxOutsidersRegistered = minOutsidersRegistered
                         recluseId = self.ID_RECLUSE
                         spyId = self.ID_SPY
                         if (recluseId in charPlayers) and (charPlayers[recluseId].poisoned == False): minOutsidersRegistered -= 1
                         if (spyId in charPlayers) and (charPlayers[spyId].poisoned == False): maxOutsidersRegistered += 1
 
-                        if maxOutsidersRegistered == 0: player.add_info(0)
-                        elif minOutsidersRegistered == 0 and random.randint(0,maxOutsidersRegistered) == 0: player.add_info(0)
+                        if maxOutsidersRegistered == 0: 
+                            player.add_info(0)
+                        elif minOutsidersRegistered == 0 and random.randint(0,maxOutsidersRegistered) == 0: 
+                            player.add_info(0)
                         else:
                             registeredName = None
                             registeredOutsider = None
@@ -1152,6 +1156,7 @@ class game:
                 scarletWoman = self.findPlayerByUpdatedCharacter('scarlet_woman')
                 if scarletWoman != None and scarletWoman.alive and self.countLivingPlayers >= 4: # then we need to use the scarlet woman
                     scarletBecomesImp(scarletWoman)
+                    player.updatedCharacter = self.char_obj['dead_imp']
                     player.updatedCharacterId = self.ID_DEAD_IMP
                 elif len(queuedReplacementMinionNames) > 0: # check if there's a queue
                     # just use the first minion in the queue
@@ -1160,7 +1165,9 @@ class game:
                     self.replacedMinionNames.append(replacedMinionName)
                     self.characterIds.discard(self.char_id[replacedMinionName])
                     rep = self.findPlayerByUpdatedCharacter(replacedMinionName)
+                    rep.updatedCharacter = self.char_obj['imp']
                     rep.updatedCharacterId = self.ID_IMP
+                    player.updatedCharacter = self.char_obj['dead_imp']
                     player.updatedCharacterId = self.ID_DEAD_IMP
                     r = None
                     for m in range(len(self.livingMinions)):
@@ -1173,7 +1180,9 @@ class game:
                     self.replacedMinionNames.append(self.char_names[replacedMinion.updatedCharacterId])
                     self.characterIds.remove(replacedMinion.updatedCharacterId)
                     replacedMinion.updatedCharacterId = self.ID_IMP  
+                    replacedMinion.updatedCharacter = self.char_obj['imp']
                     player.updatedCharacterId = self.ID_DEAD_IMP
+                    player.updatedCharacter = self.char_obj['dead_imp']
 
                     # enqueue each alternative choice
                     
@@ -1199,6 +1208,7 @@ class game:
                 else:
                     scarletBecomesImp(scarletWoman)
                 player.updatedCharacterId = self.ID_DEAD_IMP
+                player.updatedCharacter = self.char_obj['dead_imp']
                 self.executedPlayers.append(player)
             elif self.id_type[player.updatedCharacterId] == 2: # minion
                 self.characterIds.discard(player.updatedCharacterId)
