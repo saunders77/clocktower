@@ -79,46 +79,6 @@ class game:
                 'was_nominated',
                 'was_executed'
             }
-
-            # --- FAST CHARACTER TABLES (ids + properties) ---
-            # Give every character a stable small int id.
-            self.char_names = list(self.scriptCharacters.keys())
-            self.char_id = {}
-            for i in range(len(self.char_names)):
-                self.char_id[self.char_names[i]] = i
-
-            # id -> type/alignment (store as small ints for speed)
-            # types: 0=townsfolk,1=outsider,2=minion,3=demon
-            self.type_id = {'townsfolk':0, 'outsider':1, 'minion':2, 'demon':3}
-            self.id_type = [0] * len(self.char_names)
-            self.id_align = [0] * len(self.char_names)  # 0=good,1=evil
-
-            for name in self.char_names:
-                cid = self.char_id[name]
-                tname = self.scriptCharacters[name]
-                tid = self.type_id[tname]
-                self.id_type[cid] = tid
-                # outsiders + townsfolk are good; minion + demon are evil
-                if tid >= 2: self.id_align[cid] = 1
-
-            # Precompute some id lists used a lot
-            self.townsfolkIds = []
-            self.outsiderIds = []
-            self.minionIds = []
-            self.demonIds = []
-
-            for name in self.townsfolkNames: self.townsfolkIds.append(self.char_id[name])
-            for name in self.outsiderNames: self.outsiderIds.append(self.char_id[name])
-            for name in self.minionNames: self.minionIds.append(self.char_id[name])
-            self.demonIds.append(self.char_id['imp'])
-            self.demonIds.append(self.char_id['dead_imp'])
-
-            # Handy ids
-            self.ID_RECLUSE = self.char_id.get('recluse', -1)
-            self.ID_SPY = self.char_id.get('spy', -1)
-            self.ID_IMP = self.char_id.get('imp', -1)
-            self.ID_DEAD_IMP = self.char_id.get('dead_imp', -1)
-
         else: raise Exception("Script not supported. Currently supports: ['trouble_brewing'].")
     
     class player:
@@ -129,8 +89,7 @@ class game:
             self.seat = 0
             self.isMe = (name.lower() == 'you')
             self.claimedCharacter = None
-            if claimedCharacterName:
-                self.claimedCharacter = self.game.character(self.game, claimedCharacterName.lower())
+            if(claimedCharacterName): self.claimedCharacter = self.game.character(self.game, claimedCharacterName)
             
             self.claimedInfos = [None] # array of daytimes, one info per day following the info
             self.actions = [[]] # array of daytimes. Each daytime can have multiple actions
@@ -138,8 +97,6 @@ class game:
             self.poisoned = False
             self.actualCharacter = None # starting character, known to ST. Only specified by the solving functions
             self.updatedCharacter = None # only specified by the solving functions
-            self.actualCharacterId = None
-            self.updatedCharacterId = None
             self.isFortuneTellerRedHerring = False
         
         def __eq__(self, other):
@@ -180,124 +137,43 @@ class game:
         killed_at_night = was_killed_at_night
 
         def set_character(self, characterName): # to be used only during solving
-            name = characterName.lower()
-            cid = self.game.char_id[name]
-
-            self.actualCharacterId = cid
-            self.updatedCharacterId = cid
-
-            # simulation still expects character objects
-            self.actualCharacter = self.game.character(self.game, name)
-            self.updatedCharacter = self.actualCharacter
+            self.actualCharacter = self.game.character(self.game, characterName)
+            self.updatedCharacter = self.game.character(self.game, characterName)
         
         def canRegisterAsChar(self, character):
-            # character can be either a character object OR a name OR an id.
-            # For speed, prefer passing an int id in solver code.
-            if type(character) is int:
-                targetId = character
-            elif type(character) is str:
-                targetId = self.game.char_id[character.lower()]
-            else:
-                # assume character object with .name
-                targetId = self.game.char_id[character.name]
-
-            myId = self.updatedCharacterId
-
-            if targetId == myId: 
-                return True
-
-            if self.poisoned == False:
-                if myId == self.game.ID_RECLUSE:
-                    # recluse may register as any evil character
-                    return self.game.id_align[targetId] == 1
-                if myId == self.game.ID_SPY:
-                    # spy may register as any good character
-                    return self.game.id_align[targetId] == 0
-
-            # dead imp registers as imp (for undertaker / FT logic etc.)
-            if myId == self.game.ID_DEAD_IMP and targetId == self.game.ID_IMP:
-                return True
-
+            if character == self.updatedCharacter: return True
+            if self.updatedCharacter.name == 'recluse' and character.alignment == 'evil' and self.poisoned == False: return True
+            if self.updatedCharacter.name == 'spy' and character.alignment == 'good' and self.poisoned == False: return True
+            if self.updatedCharacter.name == 'dead_imp' and character.name == 'imp': return True
             return False
 
         def canRegisterAsType(self, charType):
-            # charType can be your existing strings ('townsfolk', etc.) or int type ids.
-            if type(charType) is int:
-                targetType = charType
-            else:
-                targetType = self.game.type_id[charType]
-
-            myId = self.updatedCharacterId
-            myType = self.game.id_type[myId]
-
-            if targetType == myType:
-                return True
-
-            if self.poisoned == False:
-                if myId == self.game.ID_RECLUSE and (targetType == 2 or targetType == 3):
-                    return True
-                if myId == self.game.ID_SPY and (targetType == 0 or targetType == 1):
-                    return True
-
+            if charType == self.updatedCharacter.type: return True
+            if self.updatedCharacter.name == 'recluse' and charType in {'minion', 'demon'} and self.poisoned == False: return True
+            if self.updatedCharacter.name == 'spy' and charType in {'townsfolk', 'outsider'} and self.poisoned == False: return True
             return False
         
         def mustRegisterAsType(self, charType):
-            # charType can be string ('townsfolk') or int (0..3)
-            if type(charType) is int:
-                targetType = charType
-            else:
-                targetType = self.game.type_id[charType]
-
-            myId = self.updatedCharacterId
-
-            # recluse/spy are not forced to register as their true type (unless poisoned)
-            if (myId == self.game.ID_RECLUSE or myId == self.game.ID_SPY) and (self.poisoned == False):
-                return False
-
-            return targetType == self.game.id_type[myId]
+            if self.updatedCharacter.name in {'recluse', 'spy'} and self.poisoned == False: return False
+            if charType == self.updatedCharacter.type: return True
+            return False
 
         def canRegisterAsAlignment(self, alignment):
-            # alignment can be 'good'/'evil' or 0/1
-            if type(alignment) is int:
-                targetAlign = alignment
-            else:
-                targetAlign = 0 if alignment == 'good' else 1
-
-            myId = self.updatedCharacterId
-
-            if targetAlign == self.game.id_align[myId]:
-                return True
-
-            if self.poisoned == False:
-                if myId == self.game.ID_RECLUSE and targetAlign == 1:
-                    return True
-                if myId == self.game.ID_SPY and targetAlign == 0:
-                    return True
-
+            if alignment == self.updatedCharacter.alignment: return True
+            if self.updatedCharacter.name == 'recluse' and alignment == 'evil' and self.poisoned == False: return True
+            if self.updatedCharacter.name == 'spy' and alignment == 'good' and self.poisoned == False: return True
             return False
         
         def mustRegisterAsAlignment(self, alignment):
-            if type(alignment) is int:
-                targetAlign = alignment
-            else:
-                targetAlign = 0 if alignment == 'good' else 1
-
-            myId = self.updatedCharacterId
-
-            if (myId == self.game.ID_RECLUSE or myId == self.game.ID_SPY) and (self.poisoned == False):
-                return False
-
-            return targetAlign == self.game.id_align[myId]
+            if self.updatedCharacter.name in {'recluse', 'spy'} and self.poisoned == False: return False
+            if alignment == self.updatedCharacter.alignment: return True
+            return False
         
         def listPossibleCharRegisters(self):
-            myId = self.updatedCharacterId
-            if self.game.id_type[myId] == 3:  # demon
-                return 'imp'
-            if myId == self.game.ID_RECLUSE and self.poisoned == False:
-                return self.game.minionNames + ['recluse', 'imp']
-            if myId == self.game.ID_SPY and self.poisoned == False:
-                return self.game.townsfolkNames + self.game.outsiderNames + ['spy']
-            return self.game.char_names[myId]
+            if self.updatedCharacter.type == 'demon': return 'imp'
+            if self.updatedCharacter.name == 'recluse' and self.poisoned == False: return self.game.minionNames + ['recluse','imp']
+            if self.updatedCharacter.name == 'spy' and self.poisoned == False: return self.game.townsfolkNames + self.game.outsiderNames + ['spy']
+            return self.updatedCharacter.name
         
         class info:
             def __init__(self, parent, number=None, characterName=None, name1=None, name2=None):
@@ -363,12 +239,10 @@ class game:
                 case _: return None
     
     class world:
-        def __init__(self, parent, startingCharacterNamesList, fortuneTellerRedHerringSeat, replacementMinionNamesQueue=None):
+        def __init__(self, parent, startingCharacterNamesList, fortuneTellerRedHerringSeat, replacementMinionNamesQueue=[]):
             self.game = parent
             self.startingCharacterNamesList = startingCharacterNamesList
             self.fortuneTellerRedHerringSeat = fortuneTellerRedHerringSeat
-            if replacementMinionNamesQueue is None:
-                replacementMinionNamesQueue = []
             self.replacementMinionNamesQueue = replacementMinionNamesQueue
             self.finalCharactersDict = {}
             self.transformationsDict = {}
@@ -564,16 +438,15 @@ class game:
         for player in self.circle:
             startingCharNames.append(player.actualCharacter.name)
             if player.isFortuneTellerRedHerring: fortuneTellerRedHerringSeat = player.seat     
-        return self.world(self, startingCharNames, fortuneTellerRedHerringSeat)
+        return self(self,startingCharNames, fortuneTellerRedHerringSeat)
 
 
     def add_player(self, name, claimedCharacterName=None):
         self.circle.append(self.player(self, name, claimedCharacterName))
         self.circle[-1].seat = len(self.circle) - 1
-        key = name.lower()
-        self.players[key] = self.circle[-1]
-        return self.players[key]
-
+        self.players[name] = self.circle[-1]
+        return self.players[name]
+    
     def add_players(self, names):
         for name in names:
             self.add_player(name)
@@ -660,13 +533,11 @@ class game:
         for c in range(playerCount): 
             self.circle[c].set_character(chars[c])
             if c == redHerringIndex: self.circle[c].isFortuneTellerRedHerring = True
-            if self.circle[c].updatedCharacterId == self.char_id['drunk']:
-                self.circle[c].claim(drunkHallucination)
-            elif self.id_align[self.circle[c].updatedCharacterId] == 0:  # good
-                self.circle[c].claim(chars[c])
-            else:
+            if self.circle[c].updatedCharacter.name == 'drunk': self.circle[c].claim(drunkHallucination)
+            elif self.circle[c].updatedCharacter.alignment == 'good': self.circle[c].claim(chars[c])
+            else: 
                 # evil player picks a good character to claim, depending on strategy
-                if evilStrategy == None or self.id_type[self.circle[c].updatedCharacterId] == 2:  # minion 
+                if evilStrategy == None or self.circle[c].updatedCharacter.type == 'minion': 
                     goodNames = self.townsfolkNames + self.outsiderNames # random picks for imp and minions
                     drunkIndex = None
                     for i in range(len(goodNames)):
@@ -676,10 +547,8 @@ class game:
                 else: self.circle[c].claim(self.impBluffCharNames[0]) # bluff pick for imp if there's a basic strategy
                 
     def findPlayerByUpdatedCharacter(self, characterName):
-        cid = self.char_id[characterName.lower()]
         for player in self.circle:
-            if player.updatedCharacterId == cid:
-                return player
+            if player.updatedCharacter == self.character(self, characterName): return player
         return None
 
     def pickNRandomPlayerNames(self, n, excludeNamesList, canRegisterAsType=None):
@@ -735,82 +604,50 @@ class game:
         livingPlayers = []
         goodLivingPlayers = []
         townsfolkClaimers = []
-        charPlayers = {} # dict of ID to player object
+        charPlayers = {} # dict of character name to player object
         for player in self.circle:
             player.poisoned = False
-            if player.alive and player.updatedCharacterId != self.char_id['monk']: monkablePlayers.append(player)
-            if player.alive and self.id_align[player.updatedCharacterId] == 0: goodLivingPlayers.append(player)
-            if self.id_type[player.updatedCharacterId] == 2 and player.alive: livingMinions.append(player)
+            if player.alive and player.updatedCharacter.name != 'monk': monkablePlayers.append(player)
+            if player.alive and player.updatedCharacter.alignment == 'good': goodLivingPlayers.append(player)
+            if player.updatedCharacter.type == 'minion' and player.alive: livingMinions.append(player)
             if self.day == 0 and player.claimedCharacter.type == 'townsfolk': townsfolkClaimers.append(player)
-            charPlayers[player.updatedCharacterId] = player
+            charPlayers[player.updatedCharacter.name] = player
 
-        monkId = self.char_id['monk']
-        if monkId in charPlayers:
-            livingPlayers = monkablePlayers + [charPlayers[monkId]]
-        else:
-            livingPlayers = monkablePlayers
+        if 'monk' in charPlayers.keys(): livingPlayers = monkablePlayers + [charPlayers['monk']]
+        else: livingPlayers = monkablePlayers
         
         # poisoner
-        poisonerId = self.char_id['poisoner']
-        impId = self.ID_IMP
-        monkId = self.char_id['monk']
-        mayorId = self.char_id['mayor']
-        soldierId = self.char_id['soldier']
-        scarletWomanId = self.char_id['scarlet_woman']
-
-        if poisonerId in charPlayers and charPlayers[poisonerId].alive:
+        if 'poisoner' in charPlayers.keys() and charPlayers['poisoner'].alive: 
             if evilStrategy == None:
-                (goodLivingPlayers + [charPlayers[poisonerId], charPlayers[impId]])[random.randint(0, len(goodLivingPlayers) + 1)].poisoned = True
+                (goodLivingPlayers + [charPlayers['poisoner'], charPlayers['imp']])[random.randint(0,len(goodLivingPlayers)+1)].poisoned = True # allow the poisoner to poison itself to appear non-poisoning. Allow to poison imp to simulate soldier/monk
             else:
-                picks = self.pickNRandomPlayerNames(1, [charPlayers[poisonerId].name, charPlayers[impId].name])
+                picks = self.pickNRandomPlayerNames(1,[charPlayers['poisoner'].name,charPlayers['imp'].name])
                 if picks == False: return False
-                self.players[picks[0]].poisoned = True
+                self.players[picks[0]].poisoned = True # poisoner picks someone random who isn't the poisoner or the imp
         # monk
-        if self.day > 0 and monkId in charPlayers and charPlayers[monkId].alive and (charPlayers[monkId].poisoned == False):
-            monkedPlayer = monkablePlayers[random.randint(0, len(monkablePlayers) - 1)]
+        if self.day > 0 and 'monk' in charPlayers.keys() and charPlayers['monk'].alive and charPlayers['monk'].poisoned == False: 
+            monkedPlayer = monkablePlayers[random.randint(0,len(monkablePlayers)-1)]
         
         def killPlayer(p, atNight):
             if atNight: p.was_killed_at_night()
-            if p.updatedCharacterId == self.ID_IMP:
+            if p.updatedCharacter.name == 'imp':
                 if atNight and len(livingMinions) == 0: 
                     self.active = False
                     self.winner = 'good'
                 elif atNight:
-                    replacement = livingMinions[random.randint(0, len(livingMinions) - 1)]
-
-                    # If Scarlet Woman is alive and there are 5+ living players, she becomes the imp.
-                    if (scarletWomanId in charPlayers) and charPlayers[scarletWomanId].alive and (len(livingPlayers) >= 5):
-                        replacement = charPlayers[scarletWomanId]
-
-                    # Remove old ids from lookup dict (we will re-add with new ids)
-                    if replacement.updatedCharacterId in charPlayers:
-                        charPlayers.pop(replacement.updatedCharacterId)
-                    if impId in charPlayers:
-                        charPlayers.pop(impId)
-
-                    # Apply transformation on BOTH id and object
-                    replacement.updatedCharacterId = impId
+                    replacement = livingMinions[random.randint(0,len(livingMinions)-1)]
+                    if 'scarlet_woman' in charPlayers.keys() and charPlayers['scarlet_woman'].alive and len(livingPlayers) >= 5:
+                        replacement = charPlayers.pop('scarlet_woman')
+                    else: charPlayers.pop(replacement.updatedCharacter.name)
                     replacement.updatedCharacter = self.character(self, 'imp')
-
-                    p.updatedCharacterId = self.ID_DEAD_IMP
-                    p.updatedCharacter = self.character(self, 'dead_imp')
-
-                    # Re-add to lookup dict with new ids
-                    charPlayers[replacement.updatedCharacterId] = replacement
-                    charPlayers[p.updatedCharacterId] = p
-
-                    # If replacement was a minion, remove them from livingMinions (they're now demon)
+                    charPlayers['imp'].updatedCharacter = self.character(self, 'dead_imp')
                     mIndex = None
-                    for m in range(len(livingMinions)):
-                        if livingMinions[m] == replacement:
-                            mIndex = m
-                            break
-                    if mIndex != None:
-                        livingMinions.pop(mIndex)
-
+                    for m in range(len(livingMinions)): 
+                        if livingMinions[m] == replacement: mIndex = m
+                    livingMinions.pop(mIndex)
                 else: # imp killed during the day
-                    if scarletWomanId in charPlayers and charPlayers[scarletWomanId].alive and len(livingPlayers) >= 5:
-                        replacement = charPlayers.pop(scarletWomanId)
+                    if 'scarlet_woman' in charPlayers.keys() and charPlayers['scarlet_woman'].alive and len(livingPlayers) >= 5:
+                        replacement = charPlayers.pop('scarlet_woman')
                     else: 
                         self.active = False
                         self.winner = 'good'
@@ -818,12 +655,12 @@ class game:
             for live in range(len(livingPlayers)):
                 if livingPlayers[live] == p: liveIndex = live
             livingPlayers.pop(liveIndex)
-            if self.id_type[p.updatedCharacterId] == 2: # minion
+            if p.updatedCharacter.type == 'minion':
                 mIndex = None
                 for m in range(len(livingMinions)): 
                     if livingMinions[m] == p: mIndex = m
                 livingMinions.pop(mIndex)
-            elif self.id_align[p.updatedCharacterId] == 0:
+            elif p.updatedCharacter.alignment == 'good':
                 gIndex = None
                 for g in range(len(goodLivingPlayers)): 
                     if goodLivingPlayers[g] == p: gIndex = g
@@ -837,31 +674,26 @@ class game:
         def getInfoCharNameForPlayer(p, possiblyWrong):
             deterministic = False
             if possiblyWrong: allowedNames = self.townsfolkNames + self.minionNames + self.outsiderNames + ['imp']
-            elif p.updatedCharacterId == self.ID_RECLUSE: allowedNames = self.minionNames + ['imp','recluse']
-            elif p.updatedCharacterId == self.ID_SPY: allowedNames = self.townsfolkNames + self.outsiderNames + ['spy'] 
+            elif p.updatedCharacter.name == 'recluse': allowedNames = self.minionNames + ['imp','recluse']
+            elif p.updatedCharacter.name == 'spy': allowedNames = self.townsfolkNames + self.outsiderNames + ['spy'] 
             else: deterministic = True
 
-            if deterministic and p.updatedCharacterId == self.ID_DEAD_IMP:
-                return 'imp'
-            elif deterministic:
-                return self.char_names[p.updatedCharacterId]
-            return allowedNames[random.randint(0, len(allowedNames) - 1)]        
+            if deterministic and p.updatedCharacter.name == 'dead_imp': return 'imp'
+            elif deterministic: return p.updatedCharacter.name
+            return allowedNames[random.randint(0,len(allowedNames)-1)]            
         
         # imp
-        if self.day > 0 and (impId in charPlayers) and (charPlayers[impId].poisoned == False):
-            if (evilStrategy == None or self.id_type[charPlayers[impId].actualCharacterId] == 2) and len(livingMinions) > 0:
-                nightDeathPlayer = livingPlayers[random.randint(0, len(livingPlayers) - 1)]
-                # allow the imp to kill a minion or itself. Minion is #2
+        if self.day > 0 and charPlayers['imp'].poisoned == False:
+            if (evilStrategy == None or charPlayers['imp'].actualCharacter.type == 'minion') and len(livingMinions) > 0: nightDeathPlayer = livingPlayers[random.randint(0,len(livingPlayers)-1)] # allow the imp to kill a minion or itself
             else: nightDeathPlayer = goodLivingPlayers[random.randint(0,len(goodLivingPlayers)-1)] # for basic evil strategy, don't kill yourself or minions as the imp
-            if (mayorId in charPlayers) and (nightDeathPlayer == charPlayers[mayorId]):
-                nightDeathPlayer = livingPlayers[random.randint(0, len(livingPlayers) - 1)]
+            if 'mayor' in charPlayers.keys() and nightDeathPlayer == charPlayers['mayor']: nightDeathPlayer = livingPlayers[random.randint(0,len(livingPlayers)-1)] # warning: can end the game if kills imp
 
-            if (nightDeathPlayer != monkedPlayer) and ((soldierId not in charPlayers) or (nightDeathPlayer != charPlayers[soldierId])):
+            if nightDeathPlayer != monkedPlayer and ('soldier' not in charPlayers.keys() or nightDeathPlayer != charPlayers['soldier']): # then proceed with the kill        
                 killPlayer(nightDeathPlayer, True)
         
         # info roles and fakers
         for player in self.circle:
-            possiblyWrongInfo = (self.id_align[player.updatedCharacterId] == 1) or player.poisoned or (player.updatedCharacterId == self.char_id['drunk'])
+            possiblyWrongInfo = player.updatedCharacter.alignment == 'evil' or player.poisoned or player.updatedCharacter.name == 'drunk'
             match player.claimedCharacter.name:
                 case 'washerwoman':
                     if player.alive and possiblyWrongInfo:
@@ -880,9 +712,9 @@ class game:
                         registeredName = picks[0]
                         otherNames = self.pickNRandomPlayerNames(1,[player.name, registeredName])
                         if otherNames == False: return False
-                        if self.players[registeredName].updatedCharacterId == self.ID_SPY:
+                        if self.players[registeredName].updatedCharacter.name == 'spy':
                             registeredTownsfolk = self.townsfolkNames[random.randint(0,len(self.townsfolkNames)-1)]
-                        else: registeredTownsfolk = self.char_names[self.players[registeredName].updatedCharacterId]
+                        else: registeredTownsfolk = self.players[registeredName].updatedCharacter.name
                         player.add_info(1,registeredTownsfolk,registeredName,otherNames[0])
                 case 'librarian':
                     if player.alive and possiblyWrongInfo:
@@ -894,7 +726,7 @@ class game:
                             if evilStrategy != None: # pick any non-bluff outsider or the drunk
                                 possibleFakeOutsiderChars = []
                                 for char in self.outsiderNames:
-                                    if player.actualCharacterId == self.ID_IMP and char not in self.impBluffCharNames: possibleFakeOutsiderChars.append(char)
+                                    if player.actualCharacter.name == 'imp' and char not in self.impBluffCharNames: possibleFakeOutsiderChars.append(char)
                                 possibleFakeOutsiderChars.append('drunk')
                                 player.add_info(1,possibleFakeOutsiderChars[random.randint(0,len(possibleFakeOutsiderChars)-1)],picks[0],picks[1])
                             else:
@@ -902,11 +734,8 @@ class game:
                     elif player.alive:
                         minOutsidersRegistered = self.characterCounts[playerCount][1]
                         maxOutsidersRegistered = self.characterCounts[playerCount][1]
-                        recluseId = self.ID_RECLUSE
-                        spyId = self.ID_SPY
-                        if (recluseId in charPlayers) and (charPlayers[recluseId].poisoned == False): minOutsidersRegistered -= 1
-                        if (spyId in charPlayers) and (charPlayers[spyId].poisoned == False): maxOutsidersRegistered += 1
-
+                        if 'recluse' in charPlayers.keys() and charPlayers['recluse'].poisoned == False: minOutsidersRegistered -= 1
+                        if 'spy' in charPlayers.keys() and charPlayers['spy'].poisoned == False: maxOutsidersRegistered += 1
                         if maxOutsidersRegistered == 0: player.add_info(0)
                         elif minOutsidersRegistered == 0 and random.randint(0,maxOutsidersRegistered) == 0: player.add_info(0)
                         else:
@@ -917,9 +746,9 @@ class game:
                             registeredName = picks[0]
                             otherNames = self.pickNRandomPlayerNames(1,[player.name, registeredName])
                             if otherNames == False: return False
-                            if self.players[registeredName].updatedCharacterId == self.ID_SPY:
+                            if self.players[registeredName].updatedCharacter.name == 'spy':
                                 registeredOutsider = self.outsiderNames[random.randint(0,len(self.outsiderNames)-1)]
-                            else: registeredOutsider = self.char_names[self.players[registeredName].updatedCharacterId]
+                            else: registeredOutsider = self.players[registeredName].updatedCharacter.name
                             player.add_info(1,registeredOutsider, registeredName, otherNames[0])
                 case 'investigator':
                     if player.alive and possiblyWrongInfo:
@@ -934,16 +763,14 @@ class game:
                         registeredName = picks[0]     
                         otherNames = self.pickNRandomPlayerNames(1,[player.name, registeredName])
                         if otherNames == False: return False
-                        if self.players[registeredName].updatedCharacterId == self.ID_RECLUSE:
+                        if self.players[registeredName].updatedCharacter.name == 'recluse':
                             registeredMinion = self.minionNames[random.randint(0,len(self.minionNames)-1)]
-                        else: registeredMinion = self.char_names[self.players[registeredName].updatedCharacterId]
+                        else: registeredMinion = self.players[registeredName].updatedCharacter.name
                         player.add_info(1,registeredMinion,registeredName,otherNames[0])
                 case 'chef':
                     if player.alive and possiblyWrongInfo:
                         evilPairMax = self.characterCounts[playerCount][2] # assumes trouble brewing. minion count, plus the imp, minus 1
-                        recluseId = self.ID_RECLUSE
-                        if (recluseId in charPlayers) and (charPlayers[recluseId].poisoned == False):
-                            evilPairMax += 1
+                        if 'recluse' in charPlayers.keys() and charPlayers['recluse'].poisoned == False: evilPairMax += 1
                         player.add_info(int(round((random.randint(0,int(round(math.sqrt(evilPairMax) * 4))) ** 2) / 16))) # maxes lower numbers of pairs a bit likelier
                     elif player.alive:
                         (minPairs, maxPairs) = self.chefRange(player)
@@ -981,7 +808,7 @@ class game:
                     if self.day == 0:
                         nominator = townsfolkClaimers[random.randint(0,len(townsfolkClaimers)-1)]
                         result = None
-                        if player.updatedCharacterId == self.char_id['virgin'] and player.poisoned == False: 
+                        if player.updatedCharacter.name == 'virgin' and player.poisoned == False: 
                             if nominator.canRegisterAsType('townsfolk'):
                                 if nominator.mustRegisterAsType('townsfolk') or random.randint(0,1) == 1: # spies can register 50%
                                     result = 'trigger'
@@ -992,7 +819,7 @@ class game:
                     if self.day == 0:
                         target = livingPlayers[random.randint(0,len(livingPlayers)-1)]
                         result = None
-                        if player.updatedCharacterId == self.char_id['slayer'] and player.poisoned == False:
+                        if player.updatedCharacter.name == 'slayer' and player.poisoned == False:
                             if target.canRegisterAsType('demon'):
                                 if target.mustRegisterAsType('demon') or random.randint(0,1) == 1: # recluses can register 50%
                                     result = 'trigger'
@@ -1003,7 +830,7 @@ class game:
         if noOneExecutedTodayYet and self.day < maxDays - 1 and len(livingPlayers) != 4 and random.randint(0,len(livingPlayers)) == 0: # allow for a chance of non-execution
             executee = livingPlayers[random.randint(0,len(livingPlayers)-1)]
             executee.executed_by_vote()
-            if executee.updatedCharacterId == self.char_id['saint'] and executee.poisoned == False: 
+            if executee.updatedCharacter.name == 'saint' and executee.poisoned == False: 
                 self.active = False
                 self.winner = 'evil'
             killPlayer(executee, False)
@@ -1099,15 +926,12 @@ class game:
                 if player.canRegisterAsAlignment('evil') and self.meta_redHerringCanMoveRule: self.redHerringCanMove = True # must be recluse or spy red herring
             if player.isMe and player.actualCharacter.name not in {'drunk', player.claimedCharacter.name}:
                 return False
-            elif player.actualCharacterId == self.char_id['drunk']:
+            elif player.actualCharacter.name == 'drunk':
                 outsiderCount += 1
                 if player.claimedCharacter.type != 'townsfolk': return False
                 drunk = player
-            elif self.id_type[player.actualCharacterId] == 1:  # outsider
-                outsiderCount += 1
-            elif self.id_type[player.actualCharacterId] == 2:  # minion
-                self.livingMinions.append(player)
-
+            elif player.actualCharacter.type == 'outsider': outsiderCount += 1
+            elif player.actualCharacter.type == 'minion': self.livingMinions.append(player)
         
         if drunk != None and drunk.claimedCharacter.name in self.characterNames: return False # drunk can't think they're a character that's actually in play
         if infoRolesCount < self.meta_minInfoRolesCount: return False
@@ -1125,45 +949,37 @@ class game:
             else: 
                 self.livingMinions.pop(s)
             scarletPlayer.updatedCharacter = self.character(self, 'imp')
-            scarletPlayer.updatedCharacterId = self.ID_IMP
-
 
         def killedPlayer(player, nightDeath, queuedReplacementMinionNames):
             self.countLivingPlayers -= 1
             player.alive = False
-            if nightDeath and player.updatedCharacterId == self.ID_IMP:
+            if nightDeath and player.updatedCharacter.name == 'imp':
                 if len(self.livingMinions) < 1: return False # the imp can't kill itself if no minions remain
                 
                 scarletWoman = self.findPlayerByUpdatedCharacter('scarlet_woman')
                 if scarletWoman != None and scarletWoman.alive and self.countLivingPlayers >= 4: # then we need to use the scarlet woman
                     scarletBecomesImp(scarletWoman)
                     player.updatedCharacter = self.character(self, 'dead_imp')
-                    player.updatedCharacterId = self.ID_DEAD_IMP
                 elif len(queuedReplacementMinionNames) > 0: # check if there's a queue
                     # just use the first minion in the queue
                     replacedMinionName = queuedReplacementMinionNames.pop(0)
                     
                     self.replacedMinionNames.append(replacedMinionName)
                     self.characterNames.remove(replacedMinionName)
-                    rep = self.findPlayerByUpdatedCharacter(replacedMinionName)
-                    rep.updatedCharacter = self.character(self, 'imp')
-                    rep.updatedCharacterId = self.ID_IMP
+                    self.findPlayerByUpdatedCharacter(replacedMinionName).updatedCharacter = self.character(self, 'imp')
                     player.updatedCharacter = self.character(self, 'dead_imp')
-                    player.updatedCharacterId = self.ID_DEAD_IMP
                     r = None
                     for m in range(len(self.livingMinions)):
-                        if self.id_type[self.livingMinions[m].updatedCharacterId] == 3: r = m  # demon
+                        if self.livingMinions[m].updatedCharacter.type == 'demon': r = m
                     if r == None: raise Exception("Can't find replacement minions.")     
                     self.livingMinions.pop(r)
                 else:
                     # select any minion 
                     replacedMinion = self.livingMinions.pop()
-                    self.replacedMinionNames.append(self.char_names[replacedMinion.updatedCharacterId])
-                    self.characterNames.remove(self.char_names[replacedMinion.updatedCharacterId])
+                    self.replacedMinionNames.append(replacedMinion.updatedCharacter.name)
+                    self.characterNames.remove(replacedMinion.updatedCharacter.name)
                     replacedMinion.updatedCharacter = self.character(self, 'imp')
-                    replacedMinion.updatedCharacterId = self.ID_IMP   # <-- ADD THIS LINE
                     player.updatedCharacter = self.character(self, 'dead_imp')
-                    player.updatedCharacterId = self.ID_DEAD_IMP
 
                     # enqueue each alternative choice
                     
@@ -1181,25 +997,24 @@ class game:
                         while i < len(self.replacedMinionNames) - 1: # don't use the last element in the list because it was just added. should queue another choice instead
                             minionNamesQueue.append(self.replacedMinionNames[i])
                             i += 1
-                        minionNamesQueue.append(self.char_names[livingMinion.updatedCharacterId])
+                        minionNamesQueue.append(livingMinion.updatedCharacter.name)
                         self.queuedWorlds.append(self.world(self, characterNamesList, fortuneTellerRedHerringSeat, minionNamesQueue))
-            elif player.updatedCharacterId == self.ID_IMP: # imp was still killed during the day and game is still going. Replacement must be scarlet woman
+            elif player.updatedCharacter.name == 'imp': # imp was still killed during the day and game is still going. Replacement must be scarlet woman
                 scarletWoman = self.findPlayerByUpdatedCharacter('scarlet_woman')
                 if self.countLivingPlayers < 4 or scarletWoman == None or scarletWoman.alive == False: return False  # after imp killed during the day, scarlet woman needs 4+ players to still live
                 else:
                     scarletBecomesImp(scarletWoman)
                 player.updatedCharacter = self.character(self, 'dead_imp')
-                player.updatedCharacterId = self.ID_DEAD_IMP
                 self.executedPlayers.append(player)
-            elif self.id_type[player.updatedCharacterId] == 2: # minion
-                self.characterNames.remove(self.char_names[player.updatedCharacterId])
+            elif player.updatedCharacter.type == 'minion':
+                self.characterNames.remove(player.updatedCharacter.name)
                 mIndex = None
                 for m in range(len(self.livingMinions)):
                     if self.livingMinions[m] == player: mIndex = m
                 self.livingMinions.pop(mIndex)
                 self.executedPlayers.append(player)
             else:
-                self.characterNames.remove(self.char_names[player.updatedCharacterId])
+                self.characterNames.remove(player.updatedCharacter.name)
                 self.executedPlayers.append(player)
             return True
 
@@ -1213,25 +1028,22 @@ class game:
             if testDay < len(self.demonKilledPlayers):
                 deadPlayerToday = self.demonKilledPlayers[testDay]
                 if deadPlayerToday != None: 
-                    if deadPlayerToday.updatedCharacterId == self.char_id['soldier']: poisonedNames.add(deadPlayerToday.name)
+                    if deadPlayerToday.updatedCharacter.name == 'soldier': poisonedNames.add(deadPlayerToday.name)
                     if killedPlayer(self.demonKilledPlayers[testDay], True, queuedReplacementMinionNames) == False: return False
 
             # process night info
 
             for player in self.circle: 
                 info = player.claimedInfos[testDay]
-                if info != None and self.id_align[player.updatedCharacterId] == 0:
-                    match self.char_names[player.updatedCharacterId]:
+                if info != None and player.updatedCharacter.alignment == 'good':
+                    match player.updatedCharacter.name:
                         case "washerwoman":
                             if info.player1.canRegisterAsChar(info.character) == False and info.player2.canRegisterAsChar(info.character) == False:
                                 poisonedNames.add(player.name)
                         case "librarian":
                             if info.number == 0: 
-                                butlerId = self.char_id['butler']
-                                drunkId = self.char_id['drunk']
-                                saintId = self.char_id['saint']
-                                for p2 in self.circle:
-                                    if p2.updatedCharacterId == butlerId or p2.updatedCharacterId == drunkId or p2.updatedCharacterId == saintId:
+                                for player in self.circle:
+                                    if player.updatedCharacter.name in {'butler', 'drunk', 'saint'}: # characters who must register as outsiders
                                         poisonedNames.add(player.name)
                             elif info.player1.canRegisterAsChar(info.character) == False and info.player2.canRegisterAsChar(info.character) == False:
                                 poisonedNames.add(player.name)
@@ -1248,7 +1060,7 @@ class game:
                             minCount = 0
                             maxCount = 0
 
-                            if self.id_type[info.player1.updatedCharacterId] == 3 or self.id_type[info.player2.updatedCharacterId] == 3: # must register as demon, #3
+                            if info.player1.updatedCharacter.type == 'demon' or info.player2.updatedCharacter.type == 'demon': # must register as demon
                                 minCount = 1
                                 maxCount = 1
                             elif info.player1.mustRegisterAsType('minion') and info.player2.mustRegisterAsType('minion'):
@@ -1280,8 +1092,8 @@ class game:
 
             for action in self.dailyActions[testDay]:
                 if action.type == 'slay' and action.targetPlayer.alive and action.player.alive:
-                    if action.player.updatedCharacterId == self.char_id['slayer']:
-                        if self.id_type[action.targetPlayer.updatedCharacterId] == 3: # recluse means anything can happen and player is consistent. #3 is demon
+                    if action.player.updatedCharacter.name == 'slayer':
+                        if action.targetPlayer.updatedCharacter.type == 'demon': # recluse means anything can happen and player is consistent
                             if action.result == None: 
                                 poisonedNames.add(action.player.name) # slayer could be poisoned
                             else:
@@ -1291,11 +1103,11 @@ class game:
                     elif action.result != None: return False # spy can't fake the slayer's ability
                     
                 elif action.type in {'was_nominated', 'wasnominated'} and virginNeverNominated and action.player.alive:
-                    if action.player.updatedCharacterId == self.char_id['virgin']:
+                    if action.player.updatedCharacter.name == 'virgin':
                         virginNeverNominated = False
                         if action.result != None: 
                             if killedPlayer(action.targetPlayer, False, queuedReplacementMinionNames) == False: return False
-                        if self.id_type[action.targetPlayer.updatedCharacterId] == 0: # not spy: spy means anything can happen and player is consistent. # 0 is townsfolk
+                        if action.targetPlayer.updatedCharacter.type == 'townsfolk': # not spy: spy means anything can happen and player is consistent
                             if action.result == None: 
                                 poisonedNames.add(action.player.name) # virgin could be poisoned
                         elif not action.targetPlayer.canRegisterAsType('townsfolk'):
@@ -1303,7 +1115,7 @@ class game:
                     elif action.result != None: return False # spy can't fake the virgin's ability
                 
                 elif action.type in {'was_executed','wasexecuted'}:
-                    if action.player.updatedCharacterId == self.char_id['saint']: # the game didn't end because we're solving a puzzle
+                    if player.updatedCharacter.name == 'saint': # the game didn't end because we're solving a puzzle
                         poisonedNames.add(action.player.name)
                     if killedPlayer(action.player, False, queuedReplacementMinionNames) == False: return False
 
@@ -1334,11 +1146,11 @@ class game:
                 redHerringSeat = None
                 for player in self.circle:
                     consistentCircle.append(player.actualCharacter.name)
-                    solutionDict[self.char_names[player.updatedCharacterId]] = player.name
+                    solutionDict[player.updatedCharacter.name] = player.name
                     if player.isFortuneTellerRedHerring == True:
                         redHerringSeat = player.seat
                     if not player.updatedCharacter == player.actualCharacter:
-                        transformationsDict[player.name] = [player.actualCharacter.name, self.char_names[player.updatedCharacterId]]
+                        transformationsDict[player.name] = [player.actualCharacter.name, player.updatedCharacter.name]
                 circleTuple = tuple(consistentCircle)
                 if circleTuple not in consistentCircles:
                     consistentCircles.add(circleTuple)
