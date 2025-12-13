@@ -119,6 +119,13 @@ class game:
             self.ID_IMP = self.char_id.get('imp', -1)
             self.ID_DEAD_IMP = self.char_id.get('dead_imp', -1)
 
+            # --- CHARACTER OBJECT CACHE ---
+            # Build once; solver will reuse these instead of constructing 100k+ character objects.
+            self.char_obj = {}
+            for nm in self.char_names:
+                self.char_obj[nm] = self.character(self, nm)
+
+
         else: raise Exception("Script not supported. Currently supports: ['trouble_brewing'].")
     
     class player:
@@ -130,8 +137,7 @@ class game:
             self.isMe = (name.lower() == 'you')
             self.claimedCharacter = None
             if claimedCharacterName:
-                self.claimedCharacter = self.game.character(self.game, claimedCharacterName.lower())
-            
+                self.claimedCharacter = self.game.char_obj[claimedCharacterName.lower()]
             self.claimedInfos = [None] # array of daytimes, one info per day following the info
             self.actions = [[]] # array of daytimes. Each daytime can have multiple actions
             self.alive = True # only changed by the solving functions
@@ -147,7 +153,7 @@ class game:
             return self.name == other.name
 
         def claim(self, claimedCharacterName):
-            self.claimedCharacter = self.game.character(self.game, claimedCharacterName)
+            self.claimedCharacter = self.game.char_obj[claimedCharacterName.lower()]
 
         def add_info(self, number=None, characterName=None, name1=None, name2=None):
             self.claimedInfos[self.game.day] = self.info(self, number, characterName, name1, name2)
@@ -179,16 +185,24 @@ class game:
             self.alive = False
         killed_at_night = was_killed_at_night
 
-        def set_character(self, characterName): # to be used only during solving
-            name = characterName.lower()
-            cid = self.game.char_id[name]
+        def set_character(self, characterName):  # compat wrapper (slower)
+            cid = self.game.char_id[characterName.lower()]
+            self.set_character_id(cid)
 
+        def set_character_id(self, cid):  # fast: takes int id
             self.actualCharacterId = cid
             self.updatedCharacterId = cid
 
-            # simulation still expects character objects
-            self.actualCharacter = self.game.character(self.game, name)
-            self.updatedCharacter = self.actualCharacter
+            # reuse cached objects; avoid name lookups
+            obj = self.game.char_obj[self.game.char_names[cid]]
+            self.actualCharacter = obj
+            self.updatedCharacter = obj
+
+        def reset_to_claimed(self):  # fastest common case in solver loop
+            # assumes claimedCharacter is always set
+            cid = self.game.char_id[self.claimedCharacter.name]
+            self.set_character_id(cid)
+
         
         def canRegisterAsChar(self, character):
             # character can be either a character object OR a name OR an id.
@@ -309,7 +323,7 @@ class game:
                 if(characterName): 
                     if characterName.lower() not in self.player.game.scriptCharacters.keys():
                         raise Exception("Character '" + str(characterName.lower()) + "' is not in the selected script.")
-                    self.character = self.player.game.character(self.player.game, characterName.lower())
+                    self.character = self.player.game.char_obj[characterName.lower()]
                 self.player1 = None
                 if(name1): 
                     if name1.lower() not in self.player.game.players.keys():
@@ -700,9 +714,9 @@ class game:
         minPairs = 0
         maxPairs = 0
         for seat in range(playerCount):
-            if self.circle[seat].canRegisterAsAlignment('evil') and self.circle[(seat + 1) % playerCount].canRegisterAsAlignment('evil'):
+            if self.circle[seat].canRegisterAsAlignment(1) and self.circle[(seat + 1) % playerCount].canRegisterAsAlignment(1):
                 maxPairs += 1
-            if self.circle[seat].mustRegisterAsAlignment('evil') and self.circle[(seat + 1) % playerCount].mustRegisterAsAlignment('evil'):
+            if self.circle[seat].mustRegisterAsAlignment(1) and self.circle[(seat + 1) % playerCount].mustRegisterAsAlignment(1):
                 minPairs += 1
         return (minPairs, maxPairs)
     
@@ -719,11 +733,11 @@ class game:
         while rightNeighbour.alive == False:
             rightNeighbour = self.circle[(rightNeighbour.seat - 1) % playerCount]
 
-        if leftNeighbour.canRegisterAsAlignment('evil'): maxCount += 1
-        if not leftNeighbour.canRegisterAsAlignment('good'): minCount += 1
+        if leftNeighbour.canRegisterAsAlignment(1): maxCount += 1
+        if not leftNeighbour.canRegisterAsAlignment(0): minCount += 1
 
-        if rightNeighbour.canRegisterAsAlignment('evil'): maxCount += 1
-        if not rightNeighbour.canRegisterAsAlignment('good'): minCount += 1
+        if rightNeighbour.canRegisterAsAlignment(1): maxCount += 1
+        if not rightNeighbour.canRegisterAsAlignment(0): minCount += 1
         
         return (minCount, maxCount)
 
@@ -790,10 +804,10 @@ class game:
 
                     # Apply transformation on BOTH id and object
                     replacement.updatedCharacterId = impId
-                    replacement.updatedCharacter = self.character(self, 'imp')
+                    replacement.updatedCharacter = self.char_obj['imp']
 
                     p.updatedCharacterId = self.ID_DEAD_IMP
-                    p.updatedCharacter = self.character(self, 'dead_imp')
+                    p.updatedCharacter = self.char_obj['dead_imp']
 
                     # Re-add to lookup dict with new ids
                     charPlayers[replacement.updatedCharacterId] = replacement
@@ -959,9 +973,9 @@ class game:
                     if player.alive and possiblyWrongInfo:
                         player.add_info(random.randint(0,1),'imp',picks[0],picks[1])
                     elif player.alive:
-                        if self.players[picks[0]].mustRegisterAsType('demon') or self.players[picks[1]].mustRegisterAsType('demon') or self.players[picks[0]].isFortuneTellerRedHerring or self.players[picks[1]].isFortuneTellerRedHerring:
+                        if self.players[picks[0]].mustRegisterAsType(3) or self.players[picks[1]].mustRegisterAsType('demon') or self.players[picks[0]].isFortuneTellerRedHerring or self.players[picks[1]].isFortuneTellerRedHerring:
                             player.add_info(1,'imp',picks[0],picks[1])
-                        elif self.players[picks[0]].canRegisterAsType('demon') or self.players[picks[1]].canRegisterAsType('demon'):
+                        elif self.players[picks[0]].canRegisterAsType(3) or self.players[picks[1]].canRegisterAsType('demon'):
                             player.add_info(random.randint(0,1),'imp',picks[0],picks[1])
                         else:
                             player.add_info(0,'imp',picks[0],picks[1])
@@ -982,8 +996,8 @@ class game:
                         nominator = townsfolkClaimers[random.randint(0,len(townsfolkClaimers)-1)]
                         result = None
                         if player.updatedCharacterId == self.char_id['virgin'] and player.poisoned == False: 
-                            if nominator.canRegisterAsType('townsfolk'):
-                                if nominator.mustRegisterAsType('townsfolk') or random.randint(0,1) == 1: # spies can register 50%
+                            if nominator.canRegisterAsType(0): #townsfolk
+                                if nominator.mustRegisterAsType(0) or random.randint(0,1) == 1: # spies can register 50%
                                     result = 'trigger'
                                     killPlayer(nominator, False)
                                     noOneExecutedTodayYet = False
@@ -993,8 +1007,8 @@ class game:
                         target = livingPlayers[random.randint(0,len(livingPlayers)-1)]
                         result = None
                         if player.updatedCharacterId == self.char_id['slayer'] and player.poisoned == False:
-                            if target.canRegisterAsType('demon'):
-                                if target.mustRegisterAsType('demon') or random.randint(0,1) == 1: # recluses can register 50%
+                            if target.canRegisterAsType(3):
+                                if target.mustRegisterAsType(3) or random.randint(0,1) == 1: # recluses can register 50%
                                     result = 'trigger'
                                     killPlayer(target, False)
                         player.slay(target.name, result)
@@ -1076,7 +1090,7 @@ class game:
         playerCount = len(self.circle)
         infoRolesCount = 0
         outsiderCount = 0
-        self.characterNames = set()
+        self.characterIds = set()
         self.countLivingPlayers = playerCount
         self.livingMinions = []
         self.executedPlayers = []
@@ -1090,13 +1104,14 @@ class game:
         for player in self.circle:
             player.alive = True
             player.poisoned = False # never gets set True while solving so we only need to set it here
-            if player.actualCharacter.name in self.characterNames: return False
+            cid = player.actualCharacterId
+            if cid in self.characterIds: return False
             if player.actualCharacter.name in self.infoRoles:
                 infoRolesCount += 1
-            self.characterNames.add(player.actualCharacter.name)
+            self.characterIds.add(cid)
             if player.isFortuneTellerRedHerring:
                 self.fortuneTellerRedHerring = player
-                if player.canRegisterAsAlignment('evil') and self.meta_redHerringCanMoveRule: self.redHerringCanMove = True # must be recluse or spy red herring
+                if player.canRegisterAsAlignment(1) and self.meta_redHerringCanMoveRule: self.redHerringCanMove = True # must be recluse or spy red herring
             if player.isMe and player.actualCharacter.name not in {'drunk', player.claimedCharacter.name}:
                 return False
             elif player.actualCharacterId == self.char_id['drunk']:
@@ -1109,23 +1124,23 @@ class game:
                 self.livingMinions.append(player)
 
         
-        if drunk != None and drunk.claimedCharacter.name in self.characterNames: return False # drunk can't think they're a character that's actually in play
+        if drunk != None and self.char_id[drunk.claimedCharacter.name] in self.characterIds:  return False # drunk can't think they're a character that's actually in play
         if infoRolesCount < self.meta_minInfoRolesCount: return False
 
         expectedOutsiders = self.characterCounts[playerCount][1]
-        if 'baron' in self.characterNames: expectedOutsiders = expectedOutsiders + 2
+        if self.char_id['baron'] in self.characterIds: expectedOutsiders += 2
         if expectedOutsiders != outsiderCount: return False
 
         def scarletBecomesImp(scarletPlayer):
-            self.characterNames.remove('scarlet_woman')
+            self.characterIds.discard(self.char_id['scarlet_woman'])
             s = None
             for m in range(len(self.livingMinions)):
                 if self.livingMinions[m] == scarletPlayer: s = m
             if s == None: raise Exception("Can't find scarlet woman among living minions. ")
             else: 
                 self.livingMinions.pop(s)
-            scarletPlayer.updatedCharacter = self.character(self, 'imp')
             scarletPlayer.updatedCharacterId = self.ID_IMP
+            scarletPlayer.updatedCharacter = self.char_obj['imp']
 
 
         def killedPlayer(player, nightDeath, queuedReplacementMinionNames):
@@ -1137,18 +1152,15 @@ class game:
                 scarletWoman = self.findPlayerByUpdatedCharacter('scarlet_woman')
                 if scarletWoman != None and scarletWoman.alive and self.countLivingPlayers >= 4: # then we need to use the scarlet woman
                     scarletBecomesImp(scarletWoman)
-                    player.updatedCharacter = self.character(self, 'dead_imp')
                     player.updatedCharacterId = self.ID_DEAD_IMP
                 elif len(queuedReplacementMinionNames) > 0: # check if there's a queue
                     # just use the first minion in the queue
                     replacedMinionName = queuedReplacementMinionNames.pop(0)
                     
                     self.replacedMinionNames.append(replacedMinionName)
-                    self.characterNames.remove(replacedMinionName)
+                    self.characterIds.discard(self.char_id[replacedMinionName])
                     rep = self.findPlayerByUpdatedCharacter(replacedMinionName)
-                    rep.updatedCharacter = self.character(self, 'imp')
                     rep.updatedCharacterId = self.ID_IMP
-                    player.updatedCharacter = self.character(self, 'dead_imp')
                     player.updatedCharacterId = self.ID_DEAD_IMP
                     r = None
                     for m in range(len(self.livingMinions)):
@@ -1159,10 +1171,8 @@ class game:
                     # select any minion 
                     replacedMinion = self.livingMinions.pop()
                     self.replacedMinionNames.append(self.char_names[replacedMinion.updatedCharacterId])
-                    self.characterNames.remove(self.char_names[replacedMinion.updatedCharacterId])
-                    replacedMinion.updatedCharacter = self.character(self, 'imp')
-                    replacedMinion.updatedCharacterId = self.ID_IMP   # <-- ADD THIS LINE
-                    player.updatedCharacter = self.character(self, 'dead_imp')
+                    self.characterIds.remove(replacedMinion.updatedCharacterId)
+                    replacedMinion.updatedCharacterId = self.ID_IMP  
                     player.updatedCharacterId = self.ID_DEAD_IMP
 
                     # enqueue each alternative choice
@@ -1188,25 +1198,24 @@ class game:
                 if self.countLivingPlayers < 4 or scarletWoman == None or scarletWoman.alive == False: return False  # after imp killed during the day, scarlet woman needs 4+ players to still live
                 else:
                     scarletBecomesImp(scarletWoman)
-                player.updatedCharacter = self.character(self, 'dead_imp')
                 player.updatedCharacterId = self.ID_DEAD_IMP
                 self.executedPlayers.append(player)
             elif self.id_type[player.updatedCharacterId] == 2: # minion
-                self.characterNames.remove(self.char_names[player.updatedCharacterId])
+                self.characterIds.discard(player.updatedCharacterId)
                 mIndex = None
                 for m in range(len(self.livingMinions)):
                     if self.livingMinions[m] == player: mIndex = m
                 self.livingMinions.pop(mIndex)
                 self.executedPlayers.append(player)
             else:
-                self.characterNames.remove(self.char_names[player.updatedCharacterId])
+                self.characterIds.discard(player.updatedCharacterId)
                 self.executedPlayers.append(player)
             return True
 
         for testDay in range(self.day + 1):
             poisoners = 0
             poisonedNames = set()
-            if 'poisoner' in self.characterNames: poisoners = 1
+            if self.char_id['poisoner'] in self.characterIds: poisoners = 1
             
             # process night deaths
             deadPlayerToday = None
@@ -1251,7 +1260,7 @@ class game:
                             if self.id_type[info.player1.updatedCharacterId] == 3 or self.id_type[info.player2.updatedCharacterId] == 3: # must register as demon, #3
                                 minCount = 1
                                 maxCount = 1
-                            elif info.player1.mustRegisterAsType('minion') and info.player2.mustRegisterAsType('minion'):
+                            elif info.player1.mustRegisterAsType(2) and info.player2.mustRegisterAsType(2):
                                 minCount = 0
                                 maxCount = 0
                             elif self.redHerringCanMove:
@@ -1260,7 +1269,7 @@ class game:
                             elif info.player1.isFortuneTellerRedHerring or info.player2.isFortuneTellerRedHerring: 
                                 minCount = 1
                                 maxCount = 1
-                            elif info.player1.canRegisterAsType('demon') or info.player2.canRegisterAsType('demon'): # there's a recluse and a non-demon non-herring
+                            elif info.player1.canRegisterAsType(3) or info.player2.canRegisterAsType(3): # there's a recluse and a non-demon non-herring
                                 minCount = 0
                                 maxCount = 1 
                             if info.number < minCount or info.number > maxCount: poisonedNames.add(player.name)
@@ -1286,7 +1295,7 @@ class game:
                                 poisonedNames.add(action.player.name) # slayer could be poisoned
                             else:
                                 if killedPlayer(action.targetPlayer, False, queuedReplacementMinionNames) == False: return False
-                        elif not action.targetPlayer.canRegisterAsType('demon'):
+                        elif not action.targetPlayer.canRegisterAsType(3):
                             if action.result != None: return False
                     elif action.result != None: return False # spy can't fake the slayer's ability
                     
@@ -1298,7 +1307,7 @@ class game:
                         if self.id_type[action.targetPlayer.updatedCharacterId] == 0: # not spy: spy means anything can happen and player is consistent. # 0 is townsfolk
                             if action.result == None: 
                                 poisonedNames.add(action.player.name) # virgin could be poisoned
-                        elif not action.targetPlayer.canRegisterAsType('townsfolk'):
+                        elif not action.targetPlayer.canRegisterAsType(0):
                             if action.result != None: return False
                     elif action.result != None: return False # spy can't fake the virgin's ability
                 
@@ -1369,19 +1378,25 @@ class game:
                         herring = self.circle[herringIndex]
                         for player in self.circle:
                             player.isFortuneTellerRedHerring = False
-                            player.set_character(player.claimedCharacter.name)
+                            player.reset_to_claimed()
+                        wrongCharIds = []
+                        for nm in wrongCharList:
+                            wrongCharIds.append(self.char_id[nm])
                         for i in range(wrongCharPlayerCount):
-                            self.circle[wrongCharPerm[i]].set_character(wrongCharList[i])
-                        if herring.canRegisterAsAlignment('good'):
+                            self.circle[wrongCharPerm[i]].set_character_id(wrongCharIds[i])
+                        if herring.canRegisterAsAlignment(0):
                             herring.isFortuneTellerRedHerring = True
                         if recordIfConsistent(): herringIndex = len(self.circle) # exit the loop. already found consistent one                     
                         else: herringIndex += 1
                 else:
                     for player in self.circle:
                         player.isFortuneTellerRedHerring = False
-                        player.set_character(player.claimedCharacter.name)
+                        player.reset_to_claimed()
+                    wrongCharIds = []
+                    for nm in wrongCharList:
+                        wrongCharIds.append(self.char_id[nm])
                     for i in range(wrongCharPlayerCount):
-                        self.circle[wrongCharPerm[i]].set_character(wrongCharList[i])
+                        self.circle[wrongCharPerm[i]].set_character_id(wrongCharIds[i])
                     recordIfConsistent()
                 countCheckedConfigs += 1
                 if suppress_printing == False and countCheckedConfigs % 10000 == 0: print('... Checking configurations with ' + str(drunksCount) + ' drunks. Checked ' + str(countCheckedConfigs) + ' so far...')

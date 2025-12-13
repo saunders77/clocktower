@@ -3,7 +3,7 @@
 import clocktower
 
 foundUniqueSolution = False
-
+solvedCt = 0
 while foundUniqueSolution == False:
     
     goodCombo = False
@@ -25,12 +25,13 @@ while foundUniqueSolution == False:
         solutions = g.getAllSolutions(False,0, True)
         if len(solutions) > 0:
             a = g.get_analytics()
+            solvedCt += 1
             if len(a.possible_imps) == 1: # desired number of imp solutions 
                 foundUniqueSolution = True
                 print(charNames)
                 g.print_game_summary()
                 print(solutions[0])
-            else: print("this one had more possible imps: " + str(len(a.possible_imps)))
+            else: print('solved ' + str(solvedCt) + ' with more possible imps: ' + str(len(a.possible_imps)))
 
  #Sample output:
 
