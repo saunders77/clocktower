@@ -22,8 +22,8 @@ g.players["abed"].slay('haoyu', None)
 g.players["gisele"].nominate('chris', 'trigger')
 
 g.print_game_summary()
-solutions = g.getAllSolutions()
-print("Found ",len(solutions), " solutions:")
-for solution in solutions: print(solution)
-print(g.get_analytics())
+#solutions = g.getAllSolutions()
+#print("Found ",len(solutions), " solutions:")
+#for solution in solutions: print(solution)
+#print(g.get_analytics())
 

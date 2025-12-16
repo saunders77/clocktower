@@ -2,9 +2,9 @@
 
 import clocktower
 
-foundUniqueSolution = False
+foundUniqueSolution = 0
 solvedCt = 0
-while foundUniqueSolution == False:
+while foundUniqueSolution < 100:
     
     goodCombo = False
     g = None
@@ -14,10 +14,10 @@ while foundUniqueSolution == False:
         # params: player_count, evil_strategy, min_info_roles, includes_you 
         charNames = []
         for p in g1.circle: charNames.append(p.updatedCharacter.name)
-        if 'scarlet_woman' not in charNames: 
+        if 'drunk' in charNames and 'spy' in charNames: #'poisoner' in charNames: 
             goodCombo = True
             g = g1
-    g.run_random_night_and_day('basic',1)
+    g.run_random_night_and_day('basic','helpEvil',1)
     # params: evil_strategy, max_days
     # so far, only single-day generations have been tested :)
 
@@ -27,16 +27,17 @@ while foundUniqueSolution == False:
             a = g.get_analytics()
             solvedCt += 1
             if len(a.possible_imps) == 1: # desired number of imp solutions 
-                foundUniqueSolution = True
+                foundUniqueSolution += 1
                 print(charNames)
                 g.print_game_summary()
                 print(solutions[0])
+                print(str(len(solutions)) + ' total solutions') 
             elif a.certain_imp_player_name != None:
-                foundUniqueSolution = True
+                foundUniqueSolution += 1
                 print('SPECIAL SOLUTION! ' + str(charNames))
                 g.print_game_summary()
                 for s in solutions: print(s)
-            elif solvedCt % 100 == 99: print('solved ' + str(solvedCt) + ' with more possible imps: ' + str(len(a.possible_imps)))
+            elif solvedCt % 500 == 0: print('solved ' + str(solvedCt) + ' with more possible imps: ' + str(len(a.possible_imps)))
 
  #Sample output:
 

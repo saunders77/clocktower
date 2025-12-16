@@ -361,6 +361,7 @@ class game:
             self.alignment = self.get_alignment()
 
         def __eq__(self, other):
+            if type(other) != 'character': return False
             return self.name == other.name
         
         def get_type(self):
@@ -741,7 +742,7 @@ class game:
         
         return (minCount, maxCount)
 
-    def run_random_night_and_day(self, evilStrategy=None, maxDays=None): # for constructing games
+    def run_random_night_and_day(self, evilStrategy=None, stStrategy=None, maxDays=None): # for constructing games
         playerCount = len(self.circle)
         monkedPlayer = None
         monkablePlayers = []
@@ -778,7 +779,7 @@ class game:
             if evilStrategy == None:
                 (goodLivingPlayers + [charPlayers[poisonerId], charPlayers[impId]])[random.randint(0, len(goodLivingPlayers) + 1)].poisoned = True
             else:
-                picks = self.pickNRandomPlayerNames(1, [charPlayers[poisonerId].name, charPlayers[impId].name])
+                picks = self.pickNRandomPlayerNames(1, [charPlayers[poisonerId].name, charPlayers[impId].name]) # pick any player that's not the poisoner or the imp
                 if picks == False: return False
                 self.players[picks[0]].poisoned = True
         # monk
@@ -871,7 +872,6 @@ class game:
             else: nightDeathPlayer = goodLivingPlayers[random.randint(0,len(goodLivingPlayers)-1)] # for basic evil strategy, don't kill yourself or minions as the imp
             if (mayorId in charPlayers) and (nightDeathPlayer == charPlayers[mayorId]):
                 nightDeathPlayer = livingPlayers[random.randint(0, len(livingPlayers) - 1)]
-
             if (nightDeathPlayer != monkedPlayer) and ((soldierId not in charPlayers) or (nightDeathPlayer != charPlayers[soldierId])):
                 killPlayer(nightDeathPlayer, True)
         
@@ -880,17 +880,22 @@ class game:
             possiblyWrongInfo = (self.id_align[player.updatedCharacterId] == 1) or player.poisoned or (player.updatedCharacterId == self.char_id['drunk'])
             match player.claimedCharacter.name:
                 case 'washerwoman':
-                    if player.alive and possiblyWrongInfo:
-                        picks = self.pickNRandomPlayerNames(2, [player.name])
-                        if picks == False: return False
-                        if evilStrategy != None: # strategic imps should avoid using a bluff here. evils should avoid their own claimed character
-                            possibleFakeTownsfolkChars = []
-                            for char in self.townsfolkNames: 
-                                if player.actualCharacter.name == 'imp' and char not in self.impBluffCharNames and char != 'washerwoman': possibleFakeTownsfolkChars.append(char)
-                                elif char != 'washerwoman': possibleFakeTownsfolkChars.append(char)
-                        else: possibleFakeTownsfolkChars = self.townsfolkNames
-                        player.add_info(1,possibleFakeTownsfolkChars[random.randint(0,len(possibleFakeTownsfolkChars)-1)],picks[0],picks[1])
-                    elif player.alive:
+                    if self.day == 0 and possiblyWrongInfo:
+                        if stStrategy == None:
+                            # just pick random info
+                            picks = self.pickNRandomPlayerNames(2, [player.name])
+                            player.add_info(1,self.townsfolkNames[random.randint(0,len(self.townsfolkNames)-1)],picks[0],picks[1])
+                        else:
+                            # pick wrong info that helps evil. 
+                            # give a drunk correct info
+                            if evilStrategy != None and player.actualCharacter.alignment == 'evil': # strategic imps should avoid using a bluff here. evils should avoid their own claimed character
+                                possibleFakeTownsfolkChars = []
+                                for char in self.townsfolkNames: 
+                                    if player.actualCharacter.name == 'imp' and char not in self.impBluffCharNames and char != 'washerwoman': possibleFakeTownsfolkChars.append(char)
+                                    elif char != 'washerwoman': possibleFakeTownsfolkChars.append(char)
+                            else: possibleFakeTownsfolkChars = self.townsfolkNames
+                            player.add_info(1,possibleFakeTownsfolkChars[random.randint(0,len(possibleFakeTownsfolkChars)-1)],picks[0],picks[1])
+                    elif self.day == 0:
                         picks = self.pickNRandomPlayerNames(1, [player.name],'townsfolk')
                         if picks == False: return False
                         registeredName = picks[0]
@@ -901,13 +906,13 @@ class game:
                         else: registeredTownsfolk = self.char_names[self.players[registeredName].updatedCharacterId]
                         player.add_info(1,registeredTownsfolk,registeredName,otherNames[0])
                 case 'librarian':
-                    if player.alive and possiblyWrongInfo:
+                    if self.day == 0 and possiblyWrongInfo:
                         if (self.characterCounts[playerCount][1] == 0 and random.randint(1,8) <= 5) or (self.characterCounts[playerCount][1] == 1 and random.randint(1,8) == 8):
                             player.add_info(0)
                         else:
                             picks = self.pickNRandomPlayerNames(2, [player.name])
                             if picks == False: return False
-                            if evilStrategy != None: # pick any non-bluff outsider or the drunk
+                            if stStrategy != None: # pick any non-bluff outsider or the drunk
                                 possibleFakeOutsiderChars = []
                                 for char in self.outsiderNames:
                                     if player.actualCharacterId == self.ID_IMP and char not in self.impBluffCharNames: possibleFakeOutsiderChars.append(char)
@@ -915,7 +920,7 @@ class game:
                                 player.add_info(1,possibleFakeOutsiderChars[random.randint(0,len(possibleFakeOutsiderChars)-1)],picks[0],picks[1])
                             else:
                                 player.add_info(1,self.outsiderNames[random.randint(0,len(self.outsiderNames)-1)],picks[0],picks[1])
-                    elif player.alive:
+                    elif self.day == 0:
                         minOutsidersRegistered = len(outsiderPlayers)
                         maxOutsidersRegistered = minOutsidersRegistered
                         recluseId = self.ID_RECLUSE
@@ -940,11 +945,11 @@ class game:
                             else: registeredOutsider = self.char_names[self.players[registeredName].updatedCharacterId]
                             player.add_info(1,registeredOutsider, registeredName, otherNames[0])
                 case 'investigator':
-                    if player.alive and possiblyWrongInfo:
+                    if self.day == 0 and possiblyWrongInfo:
                         picks = self.pickNRandomPlayerNames(2, [player.name])
                         if picks == False: return False
                         player.add_info(1,self.minionNames[random.randint(0,len(self.minionNames)-1)],picks[0],picks[1])
-                    elif player.alive:
+                    elif self.day == 0:
                         registeredName = None
                         registeredMinion = None
                         picks = self.pickNRandomPlayerNames(1, [player.name],'minion')
@@ -957,13 +962,13 @@ class game:
                         else: registeredMinion = self.char_names[self.players[registeredName].updatedCharacterId]
                         player.add_info(1,registeredMinion,registeredName,otherNames[0])
                 case 'chef':
-                    if player.alive and possiblyWrongInfo:
+                    if self.day == 0 and possiblyWrongInfo:
                         evilPairMax = self.characterCounts[playerCount][2] # assumes trouble brewing. minion count, plus the imp, minus 1
                         recluseId = self.ID_RECLUSE
                         if (recluseId in charPlayers) and (charPlayers[recluseId].poisoned == False):
                             evilPairMax += 1
                         player.add_info(int(round((random.randint(0,int(round(math.sqrt(evilPairMax) * 4))) ** 2) / 16))) # maxes lower numbers of pairs a bit likelier
-                    elif player.alive:
+                    elif self.day == 0:
                         (minPairs, maxPairs) = self.chefRange(player)
                         player.add_info(random.randint(minPairs,maxPairs))
                 case 'empath':
@@ -975,14 +980,18 @@ class game:
                     picks = self.pickNRandomPlayerNames(2, [])
                     if picks == False: return False
                     if player.alive and possiblyWrongInfo:
-                        player.add_info(random.randint(0,1),'imp',picks[0],picks[1])
+                        #player.add_info(random.randint(0,1),'imp',picks[0],picks[1])
+                        a = 5
                     elif player.alive:
                         if self.players[picks[0]].mustRegisterAsType(3) or self.players[picks[1]].mustRegisterAsType('demon') or self.players[picks[0]].isFortuneTellerRedHerring or self.players[picks[1]].isFortuneTellerRedHerring:
-                            player.add_info(1,'imp',picks[0],picks[1])
+                            #player.add_info(1,'imp',picks[0],picks[1])
+                            a = 5
                         elif self.players[picks[0]].canRegisterAsType(3) or self.players[picks[1]].canRegisterAsType('demon'):
-                            player.add_info(random.randint(0,1),'imp',picks[0],picks[1])
+                            #player.add_info(random.randint(0,1),'imp',picks[0],picks[1])
+                            a = 5
                         else:
-                            player.add_info(0,'imp',picks[0],picks[1])
+                            #player.add_info(0,'imp',picks[0],picks[1])
+                            a = 5
                 case 'undertaker':
                     if player.alive and self.day > 0 and self.executedPlayers[self.day-1] != None: # someone was executed
                         player.add_info(1, getInfoCharNameForPlayer(self.executedPlayers[self.day-1], possiblyWrongInfo), self.executedPlayers[self.day-1].name)
