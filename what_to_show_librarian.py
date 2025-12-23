@@ -13,7 +13,7 @@ while totalDrunks < 20000:
     minion = None
     while goodCombo == False:
         g = clocktower.game("trouble_brewing")
-        g.set_random_players_and_claims(8, 'basic', 2,False) # for 8 players
+        g.set_random_players_and_claims(7, 'basic',2,False) # for 7 players
         charNames = []
         for p in g.circle:
             if p.updatedCharacter.name == 'drunk' and p.claimedCharacter.name in {'librarian'}: 
@@ -57,6 +57,7 @@ while totalDrunks < 20000:
             else: impIncluded = 'noImp'
             
             datapoint = (fakeRole, number, allowed, accurate, onlyGood, None, None)
+            print('librarian info is: ' + character + ' and actual registered roles are ' + player1char + '/' + player2char + '. Assessment is ' + allowed + '/' + accurate)
         # pretend the imp is good, then measure the number of possible imps and the number of possible solutions
         g.findPlayerByUpdatedCharacter('imp').isMe = True
         solutions = g.getAllSolutions(False,0, True)
@@ -82,7 +83,7 @@ while totalDrunks < 20000:
                     oline += 'setup: ' + str(r)
                     print(oline)
 
-# OUTPUT:
+# OUTPUT for 8 players:
 
 #DATA:
 
