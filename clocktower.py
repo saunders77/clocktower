@@ -23,7 +23,6 @@ class game:
         self.outsiderBluffCharName = None
         self.stUsedSpyBluff = False
 
-
         if script in {'trouble_brewing','troublebrewing'}:
             self.characterCounts = { # (townsfolk, outsiders, minions, demons)
                 5: (3,0,1,1),
@@ -76,6 +75,8 @@ class game:
                 if self.scriptCharacters[role] == 'townsfolk': self.townsfolkNames.append(role)
                 elif self.scriptCharacters[role] == 'outsider': self.outsiderNames.append(role)
                 elif self.scriptCharacters[role] == 'minion': self.minionNames.append(role)
+
+            self.stEvilRecluseOptions = self.minionNames + ['imp']
 
             self.scriptActions = {
                 'slay',
@@ -863,15 +864,38 @@ class game:
 
         def getInfoCharNameForPlayer(p, possiblyWrong):
             deterministic = False
-            if possiblyWrong: allowedNames = self.townsfolkNames + self.minionNames + self.outsiderNames + ['imp']
-            elif p.updatedCharacterId == self.ID_RECLUSE: allowedNames = self.minionNames + ['imp','recluse']
-            elif p.updatedCharacterId == self.ID_SPY: allowedNames = self.townsfolkNames + self.outsiderNames + ['spy'] 
-            else: deterministic = True
+            returnName = None
+            if possiblyWrong and (stStrategy == None or random.randint(1,20) == 1): allowedNames = self.townsfolkNames + self.minionNames + self.outsiderNames + ['imp']
+            elif possiblyWrong:
+                # st strategy to benefit evil:
+                if p.updatedCharacterId in {self.ID_IMP, self.ID_DEAD_IMP}: # return a believable bluff
+                    returnName = self.impBluffCharNames[random.randint(0,len(self.impBluffCharNames)-1)] # can be reduced from 3, depending on what the imp does
+                    deterministic = True
+            elif p.updatedCharacterId == self.ID_RECLUSE:
+                if stStrategy == None or random.randint(1,5) == 1: allowedNames = self.minionNames + ['imp','recluse']
+                else:
+                    returnName = self.stEvilRecluseOptions[random.randint(0,len(self.stEvilRecluseOptions)-1)]
+                    deterministic = True
+                    self.stEvilRecluseOptions = [returnName] # can be reduced, depending on what other info the ST gives
+            elif p.updatedCharacterId == self.ID_SPY: 
+                if stStrategy == None or random.randint(1,20) == 1: allowedNames = self.townsfolkNames + self.outsiderNames + ['spy'] 
+                else:
+                    if self.stUsedSpyBluff == None and random.randint(0,1) == 0:
+                        returnName = self.townsfolkBluffCharName
+                    elif self.stUsedSpyBluff == None:
+                        returnName = self.outsiderBluffCharName
+                    else:
+                        returnName == self.stUsedSpyBluff
+                    deterministic = True
+                    self.stUsedSpyBluff = returnName
+            else: 
+                deterministic = True
+                returnName = self.char_names[p.updatedCharacterId]
 
-            if deterministic and p.updatedCharacterId == self.ID_DEAD_IMP:
+            if deterministic and returnName == 'dead_imp':
                 return 'imp'
             elif deterministic:
-                return self.char_names[p.updatedCharacterId]
+                return returnName
             return allowedNames[random.randint(0, len(allowedNames) - 1)]        
         
         # imp
@@ -906,7 +930,7 @@ class game:
                             else: # show the spy
                                 otherName = self.pickNRandomPlayerNames(1, [player.name, charPlayers[self.ID_SPY].name])[0]
                                 player.add_info(1,self.townsfolkBluffCharName, charPlayers[self.ID_SPY].name, otherName)
-                                self.stUsedSpyBluff = True
+                                self.stUsedSpyBluff = self.townsfolkBluffCharName
                     elif self.day == 0:
                         registeredName = self.pickNRandomPlayerNames(1, [player.name],'townsfolk')[0]
                         otherName = self.pickNRandomPlayerNames(1,[player.name, registeredName])[0]
@@ -915,7 +939,7 @@ class game:
                                 registeredTownsfolk = self.townsfolkNames[random.randint(0,len(self.townsfolkNames)-1)]
                             else: 
                                 registeredTownsfolk = self.townsfolkBluffCharName
-                                self.stUsedSpyBluff = True
+                                self.stUsedSpyBluff = self.townsfolkBluffCharName
                         else: registeredTownsfolk = self.char_names[self.players[registeredName].updatedCharacterId]
                         player.add_info(1,registeredTownsfolk,registeredName,otherName)
                 case 'librarian':
@@ -935,7 +959,7 @@ class game:
                             else: # show the spy
                                 otherName = self.pickNRandomPlayerNames(1, [player.name, charPlayers[self.ID_SPY].name])[0]
                                 player.add_info(1,self.outsiderBluffCharName, charPlayers[self.ID_SPY].name, otherName)
-                                self.stUsedSpyBluff = True
+                                self.stUsedSpyBluff = self.outsiderBluffCharName
                     elif self.day == 0:
                         minOutsidersRegistered = len(outsiderPlayers)
                         maxOutsidersRegistered = minOutsidersRegistered
@@ -947,7 +971,7 @@ class game:
                             registeredName = charPlayers[spyId].name
                             otherName = self.pickNRandomPlayerNames(1,[player.name, registeredName])[0]
                             player.add_info(1,registeredChar, registeredName, otherNames[0])
-                            self.stUsedSpyBluff = True
+                            self.stUsedSpyBluff = self.outsiderBluffCharName
                         else: # normal randomized correct info
                             if (recluseId in charPlayers) and (charPlayers[recluseId].poisoned == False): minOutsidersRegistered -= 1
                             if (spyId in charPlayers) and (charPlayers[spyId].poisoned == False): maxOutsidersRegistered += 1
@@ -1006,12 +1030,13 @@ class game:
                     if player.alive and possiblyWrongInfo:
                         if stStrategy == None or random.randint(0,1) == 0:
                             player.add_info(random.randint(0,1),'imp',picks[0],picks[1])
-                        else: player.add_info(1,'imp',picks[0],picks[1])
+                        else: player.add_info(1,'imp',picks[0],picks[1]) # gives a 75% chance of 'yes'
                     elif player.alive:
-                        if self.players[picks[0]].mustRegisterAsType(3) or self.players[picks[1]].mustRegisterAsType('demon') or self.players[picks[0]].isFortuneTellerRedHerring or self.players[picks[1]].isFortuneTellerRedHerring:
+                        if self.players[picks[0]].mustRegisterAsType(3) or self.players[picks[1]].mustRegisterAsType(3) or self.players[picks[0]].isFortuneTellerRedHerring or self.players[picks[1]].isFortuneTellerRedHerring: # type 3 is demon
                             player.add_info(1,'imp',picks[0],picks[1])
-                        elif self.players[picks[0]].canRegisterAsType(3) or self.players[picks[1]].canRegisterAsType('demon'):
-                            player.add_info(random.randint(0,1),'imp',picks[0],picks[1])
+                        elif self.players[picks[0]].canRegisterAsType(3) or self.players[picks[1]].canRegisterAsType(3):
+                            if stStrategy == None or random.randint(0,2) == 0: player.add_info(random.randint(0,1),'imp',picks[0],picks[1])
+                            else: player.add_info(1,'imp',picks[0],picks[1]) # when there's a recluse, 5/6 of the time show a yes
                         else:
                             player.add_info(0,'imp',picks[0],picks[1])
                 case 'undertaker':
