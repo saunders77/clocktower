@@ -21,7 +21,7 @@ class game:
         self.impBluffCharNames = []
         self.townsfolkBluffCharName = None
         self.outsiderBluffCharName = None
-        self.stUsedSpyBluff = False
+        self.stUsedSpyBluff = None
 
         if script in {'trouble_brewing','troublebrewing'}:
             self.characterCounts = { # (townsfolk, outsiders, minions, demons)
@@ -1052,15 +1052,21 @@ class game:
         for player in livingPlayers:
             match player.claimedCharacter.name:
                 case 'virgin': # be nominated by a random living player
-                    if self.day == 0:
-                        nominator = townsfolkClaimers[random.randint(0,len(townsfolkClaimers)-1)]
+                    if self.day == 0: # in this simulation, the virgin claimers are only nominated once, and on the 0th day
+                        nominator = livingPlayers[random.randint(0,len(livingPlayers)-1)]
                         result = None
                         if player.updatedCharacterId == self.char_id['virgin'] and player.poisoned == False: 
                             if nominator.canRegisterAsType(0): #townsfolk
-                                if nominator.mustRegisterAsType(0) or random.randint(0,1) == 1: # spies can register 50%
-                                    result = 'trigger'
+                                if nominator.mustRegisterAsType(0) or (stStrategy == None and random.randint(0,1) == 0):
                                     killPlayer(nominator, False)
                                     noOneExecutedTodayYet = False
+                                    result = 'trigger'
+                                elif stStrategy != None: # nominator is the spy
+                                    if (self.stUsedSpyBluff == self.townsfolkBluffCharName and random.randint(0,12) < 12) or random.randint(0,12) == 0: # then the ST can usually act according to the spy bluff
+                                        killPlayer(nominator, False)
+                                        noOneExecutedTodayYet = False
+                                        result = 'trigger'
+                                    
                         nominator.nominate(player.name, result)
                 case 'slayer': # shoot at a random living player
                     if self.day == 0:

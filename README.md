@@ -123,6 +123,12 @@ Set you_exist = True if you want one of the players to be "you", in other words,
 Set evil_stategy = 'basic' for basic strategy such as picking an imp bluff instead of a random bluff.
 Set max_days = 1 to stop after 1 day (single-day puzzle) instead of continuing through to the final 3
 
+## Storyteller Strategy:
+When not set, all info and choices are random (based on allowed choices). When set to 'helpEvil', the following rules arae followed:
+-If the spy registers as a townsfolk to the washerwoman (or drunk washerwoman), or as an outsider to the librarian (or drunk librarian), the Storyteller usually continues using this registration for the Spy, for the purposes of registration by the undertaker or ravenskeeper. The logic is that the Spy is capable of seeing these registrations in the grimoire, regardless of whether they're revealed during play.
+-
+
+
 ## Samples: 
 
 See clocktower/samples for usage examples with 3 puzzles  
